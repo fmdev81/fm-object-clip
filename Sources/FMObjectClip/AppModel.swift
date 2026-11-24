@@ -266,12 +266,12 @@ final class AppModel: ObservableObject {
         try? store?.data(for: entry)
     }
 
-    private func capture(_ objects: [FMObject]) {
+    func capture(_ objects: [FMObject]) {
         guard let store else { return }
         let before = Set(store.folders)
         defer { expandNewFolders(since: before) }
         for obj in objects {
-            do { try store.add(obj.data, cls: obj.cls) } catch { errorMessage = "Cannot keep the capture: \(error.localizedDescription)" }
+            do { try store.add(obj.data, cls: obj.cls, name: obj.name, folder: obj.folder) } catch { errorMessage = "Cannot keep the capture: \(error.localizedDescription)" }
         }
         refresh()
     }

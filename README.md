@@ -34,10 +34,25 @@ The app captures these FileMaker Pro classes and no others:
 
 The pasteboard type of a class is `CorePasteboardFlavorType 0x` followed by the hex of the 4 ASCII letters. For example, the type of `XMSS` is `CorePasteboardFlavorType 0x584D5353`.
 
+### Name and folder classes
+
+Any tool that puts FileMaker objects on the clipboard can add these classes to name the entry and file it in a folder. The data is UTF-8 text. FileMaker Pro does not know these classes, so it pastes the FileMaker class only.
+
+| Class | Pasteboard type | Value |
+|---|---|---|
+| `FOPN` | `CorePasteboardFlavorType 0x464F504E` | The name of the entry |
+| `FOPF` | `CorePasteboardFlavorType 0x464F5046` | The folder of the entry |
+
+- Put them in the same clipboard write as the FileMaker class. Each class is optional.
+- The app removes the spaces at the start and the end. An empty value is the same as no value.
+- If the folder does not exist, the app makes it. If the class and the XML are the same as an entry, the app updates the name and the folder of that entry. Without `FOPF`, an entry stays in its folder.
+- **Copy Entry** and `fm-object-clip-cli restore` put the FileMaker class only, not the name or the folder.
+- `fm-object-clip-cli watch` and `info` read the same classes.
+
 ## Entry names
 
 - Without a name, the title of an entry comes from its XML. For a script, it is the first comment that has text, and the count of steps.
-- To give an entry a name, select **File** > **Rename…** (Cmd+R), or double-click the title in the detail pane. An empty name gives the automatic title again. `fm-object-clip-cli rename` and `fm-object-clip-cli add --name` also set a name.
+- To give an entry a name, select **File** > **Rename…** (Cmd+R), or double-click the title in the detail pane. An empty name gives the automatic title again. `fm-object-clip-cli rename` and `fm-object-clip-cli add --name` also set a name. A tool can also give the name on the clipboard (see [Name and folder classes](#name-and-folder-classes)).
 - The name does not change the stored XML or the data that **Copy Entry** puts on the clipboard.
 
 ## Folders
@@ -51,6 +66,7 @@ Use folders to keep the entries of one project together. Folders are flat: a fol
 - To make a folder, select **File** > **New Folder…** (Cmd+Shift+N), or right-click a folder row. A new folder is open.
 - To move an entry to a folder, drag the entry to the folder row. To take an entry out of its folder, drag it to **No Folder**. You can also select **File** > **Move to Folder**, or right-click the entry and select **Move to Folder**. Select **No Folder** to take the entry out of its folder.
 - To rename or delete a folder, right-click the folder row. You can also click the folder row and then select **File** > **Rename Folder…** or **Delete Folder**.
+- A tool can file a capture in a folder on the clipboard (see [Name and folder classes](#name-and-folder-classes)).
 - When you delete a folder, its entries stay in the history, in no folder.
 - The folder does not change the stored XML or the data that **Copy Entry** puts on the clipboard.
 
@@ -228,7 +244,7 @@ With `--json`, the read commands give an entry or a list of entries. The write c
 | `file` | The path of the XML file |
 | `canonical` | The SHA-256 of the canonical XML. Two entries with the same class and the same value are the same object. |
 
-A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `info` gives `{"class", "bytes"}` for each object.
+A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `info` gives `{"class", "bytes", "name", "folder"}` for each object. `name` and `folder` are `null` when the clipboard has no `FOPN` or `FOPF`.
 
 ### Exit codes
 

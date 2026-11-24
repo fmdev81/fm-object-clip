@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 
 /// One entry of the history. `index.json` keeps these fields. `name` is optional: it is in the index only
-/// when the user (Rename, or `fm-object-clip-cli add --name`) gave the entry a name.
+/// when the user (Rename, or `fm-object-clip-cli add --name`) or the clipboard (class `FOPN`) gave the entry a name.
 public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
     public let id: String
     public let cls: FMClass
