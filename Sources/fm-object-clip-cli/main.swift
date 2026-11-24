@@ -56,6 +56,12 @@ func fail(_ code: ExitCode, _ message: String) -> CLIError {
     CLIError(code: code, message: message)
 }
 
+/// Stops add and restore for a layout clip with a portal child outside the first portal row (PortalCheck).
+/// FileMaker pastes such a child as an object that the user cannot select.
+func refuseBadPortals(_ cls: FMClass, _ data: Data) throws {
+    if let message = PortalCheck.message(cls: cls, data: data) { throw fail(.error, message) }
+}
+
 // MARK: - Arguments
 
 struct Arguments {
@@ -246,6 +252,7 @@ func run(_ args: Arguments) throws {
         guard let cls = try parseClass(args.values["--class"]) else { throw fail(.usage, "add needs --class C") }
         guard let data = FileManager.default.contents(atPath: p[1]) else { throw fail(.notFound, "cannot read the file \(p[1])") }
         guard !data.isEmpty else { throw fail(.error, "the file \(p[1]) is empty") }
+        try refuseBadPortals(cls, data)
         let store = try openStore(args)
         let e = try store.add(data, cls: cls, name: args.values["--name"], folder: args.values["--folder"], source: "cli")
         if args.json { printJSON(entryJSON(e, store)) } else { print(line(e)) }
@@ -254,6 +261,7 @@ func run(_ args: Arguments) throws {
         try need(args, 2, "restore ID")
         let store = try openStore(args)
         let e = try entryOrFail(store, p[1])
+        try refuseBadPortals(e.cls, try store.data(for: e))
         guard try store.copy(e) != nil else { throw fail(.error, "the clipboard refused the data") }
         if args.json { printJSON(entryJSON(e, store)) } else { print("clipboard set: \(e.cls.rawValue), \(e.displayTitle)") }
 

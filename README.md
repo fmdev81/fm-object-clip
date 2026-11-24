@@ -100,7 +100,7 @@ The files are plain XML and JSON. Scripts and agents can read them without the a
 - A filter by class: All, Scripts, Tables, Fields, Layout.
 - A search field. It finds text in the name, in the automatic title and in the XML.
 - The header has the type filter and the search field only. The operations on an entry are in the **File** menu.
-- **File** > **Copy Entry** (Cmd+C): puts the selected entry on the clipboard with its class. A double-click and the Return key do the same. A copy from the app does not make a new entry, and it does not change the time or the place of the entry. For approximately 1 second, the row shows a green check mark and "Copied" in place of the time.
+- **File** > **Copy Entry** (Cmd+C): puts the selected entry on the clipboard with its class. A double-click and the Return key do the same. A copy from the app does not make a new entry, and it does not change the time or the place of the entry. For approximately 1 second, the row shows a green check mark and "Copied" in place of the time. For layout objects, the app does not copy an entry that has a portal child outside the first row or the portal. It shows an error, and the clipboard does not change.
 - The Up Arrow and Down Arrow keys move the selection, also while you type in the search field. From the search field, they also move the keyboard focus to the list.
 - The Delete key deletes the selected entries when the list has the keyboard focus. In the search field, the Delete key changes the text. When the app starts, the list has the keyboard focus. A click on a row also gives the focus to the list.
 - The Left Arrow key closes the group of the selected entry, or the selected group. The Right Arrow key opens the selected group.
@@ -194,8 +194,8 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `xml ID` | The stored XML bytes, to stdout. |
 | `folders` | The folders and the number of entries in each. |
 | `info` | The FileMaker objects on the clipboard now. |
-| `add FILE.xml --class C [--name NAME] [--folder NAME]` | Adds an entry from a file, with the rules of a capture. If the class and the XML are the same as an entry, it updates the name and the folder of that entry. |
-| `restore ID` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. |
+| `add FILE.xml --class C [--name NAME] [--folder NAME]` | Adds an entry from a file, with the rules of a capture. If the class and the XML are the same as an entry, it updates the name and the folder of that entry. For `XML2`, the tool stops with an error if a portal child is outside the first row or the portal. |
+| `restore ID` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. For `XML2`, the tool does the same portal check as `add`. |
 | `rename ID NAME` | Gives the entry a name. `""` gives the automatic title again. |
 | `move ID FOLDER` | Moves the entry to the folder. The tool makes the folder if necessary. |
 | `move ID --no-folder` | Takes the entry out of its folder. |

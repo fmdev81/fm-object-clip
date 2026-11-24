@@ -282,9 +282,14 @@ final class AppModel: ObservableObject {
 
     /// Puts the entry on the clipboard with its class. The watcher ignores this change, so it makes no new entry.
     /// The entry keeps its time and its place, also when FileMaker Pro writes the clipboard again (see RestoreRecord).
+    /// A layout entry with a portal child outside the first portal row stays off the clipboard (PortalCheck).
     func copy(_ entry: HistoryEntry, to pasteboard: NSPasteboard = .general) {
         guard let store else { return }
         do {
+            if let message = PortalCheck.message(cls: entry.cls, data: try store.data(for: entry)) {
+                errorMessage = "Cannot copy the entry.\n" + message
+                return
+            }
             guard let count = try store.copy(entry, to: pasteboard) else { errorMessage = "The clipboard refused the data."; return }
             watcher?.ignore(changeCount: count)
             showCopied(entry.id)
