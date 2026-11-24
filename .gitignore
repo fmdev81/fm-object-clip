@@ -1,0 +1,52 @@
+# SwiftPM / Xcode build output
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcuserstate
+Package.resolved.orig
+
+# Output of scripts/make-app.sh (build/FMObjectClip.app, build/bin/)
+build/
+*.app/
+dist/
+*.zip
+*.dmg
+
+# Default output of scripts/make-icon.swift when run without an argument.
+# Resources/AppIcon.icns is a source asset and stays tracked.
+/AppIcon-1024.png
+*.iconset/
+
+# An fm-object-clip history copied in by mistake (it holds your FileMaker objects)
+history/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.nova/
+
+# Secrets and signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.provisionprofile
+notarize*.json
