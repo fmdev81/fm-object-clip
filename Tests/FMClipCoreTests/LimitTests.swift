@@ -36,21 +36,24 @@ final class LimitTests: XCTestCase {
         XCTAssertEqual(store.entries.count, 2)
     }
 
-    func testLimitIs200() {
-        XCTAssertEqual(HistoryStore.maxEntries, 200)
+    func testDefaultLimitIs500() throws {
+        XCTAssertEqual(ClipSettings.defaultUncategorizedLimit, 500)
+        XCTAssertEqual(try HistoryStore(folder: folder).limit, 500)
     }
 
-    func testOldestEntryGoesAfter201Captures() throws {
+    func testOldestEntryGoesWhenCapturesGoOverTheLimit() throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try SettingsStore.save(ClipSettings(uncategorizedLimit: 20), to: folder)
         let store = try HistoryStore(folder: folder)
         var ids: [String] = []
-        for i in 0...HistoryStore.maxEntries {
+        for i in 0...20 {
             ids.append(try store.add(Data("<fmxmlsnippet><Step name=\"Step \(i)\"/></fmxmlsnippet>".utf8), cls: .XMSS).id)
         }
-        XCTAssertEqual(store.entries.count, 200)
-        XCTAssertEqual(try xmlFiles().count, 200)
+        XCTAssertEqual(store.entries.count, 20)
+        XCTAssertEqual(try xmlFiles().count, 20)
         XCTAssertNil(store.entry(id: ids[0]))
         XCTAssertNotNil(store.entry(id: ids[1]))
-        XCTAssertEqual(try HistoryStore(folder: folder).entries.count, 200)
+        XCTAssertEqual(try HistoryStore(folder: folder).entries.count, 20)
     }
 
     func testRepairAtOpen() throws {

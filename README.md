@@ -44,14 +44,14 @@ The pasteboard type of a class is `CorePasteboardFlavorType 0x` followed by the 
 
 Use folders to keep the entries of one project together. Folders are flat: a folder cannot hold a folder. An entry is in one folder or in no folder.
 
-- The list on the left is a tree, as in the sidebar of the Finder. Each folder is a group row with a triangle, a folder icon, the name in bold and the number of entries. After the folders, the group **No Folder** has the entries that are in no folder. Thus each entry is under a group row.
-- Click a group row to open or close the group. When the group is open, its entries show under it, with an indent and a thin vertical line. The app keeps the open groups between launches. **No Folder** is open at the first launch.
+- The list on the left is a tree, as in the sidebar of the Finder. Each folder is a group row with a triangle, a folder icon, the name in bold and the number of entries. After the folders, the uncategorized group has the entries that are in no folder. Its name is **Uncategorized**. You can change the name in **Settings** (see [Settings](#settings)). Thus each entry is under a group row.
+- Click a group row to open or close the group. When the group is open, its entries show under it, with an indent and a thin vertical line. The app keeps the open groups between launches. The uncategorized group is open at the first launch.
 - The type filter and the search work on all the entries. While a filter or a search is active, the list shows only the folders that have a match, and these folders are open.
 - If the list does not show the selected entry (after a filter, a search, or when you close its folder), the detail pane is empty.
 - To make a folder, select **File** > **New Folder…** (Cmd+Shift+N), or right-click a folder row. A new folder is open.
-- To move an entry to a folder, drag the entry to the folder row. To take an entry out of its folder, drag it to **No Folder**. You can also select **File** > **Move to Folder**, or right-click the entry and select **Move to Folder**. Select **No Folder** to take the entry out of its folder.
+- To move an entry to a folder, drag the entry to the folder row. To take an entry out of its folder, drag it to the uncategorized group. You can also select **File** > **Move to Folder**, or right-click the entry and select **Move to Folder**. Select the name of the uncategorized group (**Uncategorized**) to take the entry out of its folder.
 - To rename or delete a folder, right-click the folder row. You can also click the folder row and then select **File** > **Rename Folder…** or **Delete Folder**.
-- When you delete a folder, its entries stay in the history, in no folder.
+- When you delete a folder, its entries stay in the history, in the uncategorized group.
 - The folder does not change the stored XML or the data that **Copy Entry** puts on the clipboard.
 
 ## History
@@ -75,8 +75,9 @@ The history is in `~/Library/Application Support/fm-object-clip/history/`. Your 
 | `canonical` | The SHA-256 of the canonical XML, for the duplicate check. An entry from an earlier version can have no value. The app adds it when it needs it. |
 
 - The file `folders.json` has the names of the folders, also the empty folders.
+- The file `settings.json` has the settings (see [Settings](#settings)).
 - The file `.last-restore.json` has the class and the hashes of the last entry that **Copy Entry** or `fm-object-clip-cli restore` put on the clipboard. When the clipboard gets other contents, the app deletes the file.
-- The history keeps 200 entries. When a new entry goes over the limit, the app or the CLI deletes the oldest entry that is in no folder. The app does not delete an entry that is in a folder.
+- The history keeps 500 uncategorized entries (entries in no folder). You can change the limit in **Settings**. When there are more uncategorized entries, the app or the CLI deletes the oldest uncategorized entries. Entries in folders do not count, and the app never deletes them.
 - If a new capture has the same class and the same content as an entry, the app does not add a new entry. It moves the old entry to the top, and the entry keeps the bytes of the first capture. The same content is the same bytes, or the same canonical XML.
 - A copy from the app (**Copy Entry**) or from `fm-object-clip-cli restore` does not change the entry. The entry keeps its time and its place. When you paste, FileMaker Pro can put the same object on the clipboard again. The app does not move the entry for this capture. The rule stops when the clipboard gets other contents. Then an identical copy in FileMaker Pro moves the entry to the top again.
 - The canonical XML does not include these items:
@@ -94,7 +95,7 @@ The files are plain XML and JSON. Scripts and agents can read them without the a
 - A list of the entries. The list has a fixed width. The selected entry has a light tint. The order of the entries in each group is:
   - In a folder where each entry has a name: the order of the names. Numbers in a name are in the natural order, for example "2" before "10". Thus the entries "01 …" to "17 …" stay in their order.
   - In a folder where one or more entries have no name: the newest entry at the top.
-  - In **No Folder**: the newest entry at the top.
+  - In the uncategorized group: the newest entry at the top.
 - Each entry row has one line: a small colored badge for the type, the title (the name, else the automatic title), and a short time. The badge colors are Scripts (blue), Tables (purple), Fields (green) and Layout (orange).
 - The short time is the time for an entry of today, "Yesterday", or a short date, for example "Nov 18". A date of an earlier year also has the year. The detail pane and the tooltip of a row show the full date and time.
 - A filter by class: All, Scripts, Tables, Fields, Layout.
@@ -124,12 +125,36 @@ On macOS 26 and later, the toolbar and the header of the detail pane use Liquid 
 
 When you close the window, the app continues to watch the clipboard. To open the window again, click the Dock icon, or select **Window** > **History Window** (Cmd+0). To stop the app, press Cmd+Q.
 
+## Settings
+
+To open the Settings window, select **fm-object-clip** > **Settings…** (Cmd+,) or **File** > **Settings…**. Each change applies at once.
+
+| Setting | Default | What it does |
+|---|---|---|
+| Appearance | System | System, Light or Dark. System follows the appearance of macOS. |
+| Uncategorized group | Uncategorized | The name of the group for the entries in no folder. The name is also the item in the **Move to Folder** menus. It changes only the label: the entries do not change. A blank name gives "Uncategorized". |
+| Uncategorized limit | 500 | The maximum number of uncategorized entries, from 10 to 100000. When a new capture goes over the limit, the app deletes the oldest uncategorized entries. Entries in folders do not count, and the app never deletes them. |
+
+If you set a limit that is lower than the number of uncategorized entries now, the app asks first, for example "Delete the 40 oldest uncategorized entries?". Click **OK** to delete them at once. Click **Cancel** to keep the old limit.
+
+The settings are in the file `settings.json` in the history folder:
+
+```json
+{
+  "appearance" : "system",
+  "uncategorizedLimit" : 500,
+  "uncategorizedName" : "Uncategorized"
+}
+```
+
+The app and `fm-object-clip-cli` use the same file. A change from the CLI shows in the app at once. If a key is missing or has a bad value, the app uses the default.
+
 ## Menus
 
 | Menu | Items |
 |---|---|
-| fm-object-clip | About fm-object-clip, Quit (Cmd+Q) |
-| File | Entries: Copy Entry (Cmd+C), Rename… (Cmd+R), Move to Folder, Save As… (Cmd+Shift+S), Delete (Cmd+Delete). Folders: New Folder… (Cmd+Shift+N), Rename Folder…, Delete Folder. Then Close Window (Cmd+W). |
+| fm-object-clip | About fm-object-clip, Settings… (Cmd+,), Quit (Cmd+Q) |
+| File | Entries: Copy Entry (Cmd+C), Rename… (Cmd+R), Move to Folder, Save As… (Cmd+Shift+S), Delete (Cmd+Delete). Folders: New Folder… (Cmd+Shift+N), Rename Folder…, Delete Folder. Then Settings… and Close Window (Cmd+W). |
 | Edit | The standard items. When the list has the keyboard focus, **Select All** (Cmd+A) and **Delete** act on the entries. |
 | View | All Types (Cmd+1), Scripts (Cmd+2), Tables (Cmd+3), Fields (Cmd+4), Layout (Cmd+5), Show XML (Cmd+Option+X) |
 | Window | History Window (Cmd+0) and the standard items |
@@ -198,11 +223,13 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `restore ID` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. |
 | `rename ID NAME` | Gives the entry a name. `""` gives the automatic title again. |
 | `move ID FOLDER` | Moves the entry to the folder. The tool makes the folder if necessary. |
-| `move ID --no-folder` | Takes the entry out of its folder. |
+| `move ID --no-folder` | Takes the entry out of its folder. It goes to the uncategorized group. |
 | `delete ID [ID ...]` | Deletes the entries. If an ID does not exist, the tool deletes nothing. |
 | `folder new NAME` | Makes a folder. |
 | `folder rename OLD NEW` | Renames a folder. Its entries go with it. |
-| `folder delete NAME` | Deletes a folder. Its entries go to No Folder. |
+| `folder delete NAME` | Deletes a folder. Its entries go to the uncategorized group. |
+| `settings` | Shows the settings. |
+| `settings set KEY VALUE` | Sets one setting. `KEY` is `appearance` (`system`, `light` or `dark`), `uncategorized-name` (text), or `uncategorized-limit` (10 to 100000). A lower limit deletes the oldest uncategorized entries at once, with no question. The tool shows how many entries it deleted. A bad key or value gives exit code 2. |
 | `watch` | Adds each FileMaker object on the clipboard to the history, without the app. |
 | `help`, `--help` | Shows the help. |
 
@@ -228,7 +255,7 @@ With `--json`, the read commands give an entry or a list of entries. The write c
 | `file` | The path of the XML file |
 | `canonical` | The SHA-256 of the canonical XML. Two entries with the same class and the same value are the same object. |
 
-A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `info` gives `{"class", "bytes"}` for each object.
+A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `settings` gives `{"appearance", "uncategorizedName", "uncategorizedLimit"}`. `settings set` also gives `deletedEntries`. `info` gives `{"class", "bytes"}` for each object.
 
 ### Exit codes
 
@@ -251,6 +278,7 @@ $CLI restore 20261120-180123-0f558176
 $CLI move 20261120-180123-0f558176 "Project A"
 $CLI folder new "Project B"
 $CLI add contacts-fields.xml --class XMFD --name "Contact fields" --folder "Project A"
+$CLI settings set uncategorized-limit 1000
 ```
 
 ## Limits

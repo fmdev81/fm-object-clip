@@ -311,7 +311,7 @@ struct EntryRow: View {
 }
 
 /// A group row, like a Finder or Mail sidebar section: triangle, icon, semibold name and number of entries.
-/// It is a folder, or the group "No Folder" (folder == nil) for the entries in no folder.
+/// It is a folder, or the uncategorized group (folder == nil, label from the settings) for the entries in no folder.
 /// A click on the row opens or closes the group. A click on a folder row also selects it for the File menu.
 /// Right-click a folder row to rename or delete it. Drop an entry on a group row to move it to that folder, or to no folder.
 struct GroupRow: View {
@@ -336,7 +336,7 @@ struct GroupRow: View {
             Image(systemName: folder == nil ? "tray" : (expanded ? "folder.fill" : "folder"))
                 .foregroundStyle(folder == nil ? Color.secondary : Color.accentColor.opacity(0.85))
                 .frame(width: 18)
-            Text(folder ?? "No Folder")
+            Text(folder ?? model.uncategorizedName)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(folder == nil ? .secondary : .primary)
                 .lineLimit(1)
@@ -386,7 +386,7 @@ struct GroupRow: View {
     }
 }
 
-/// The Move to Folder menu for an entry: No Folder, each folder, and New Folder.
+/// The Move to Folder menu for an entry: the uncategorized group, each folder, and New Folder.
 struct MoveToFolderMenu: View {
     @EnvironmentObject var model: AppModel
     let entry: HistoryEntry
@@ -395,7 +395,7 @@ struct MoveToFolderMenu: View {
     var body: some View {
         let targets = model.contextTargets(for: entry.id)
         Menu("Move to Folder") {
-            Button("No Folder") { model.contextMove(entry.id, to: nil) }
+            Button(model.uncategorizedName) { model.contextMove(entry.id, to: nil) }
                 .disabled(targets.allSatisfy { $0.folder == nil })
             if !model.folders.isEmpty { Divider() }
             ForEach(model.folders, id: \.self) { folder in
