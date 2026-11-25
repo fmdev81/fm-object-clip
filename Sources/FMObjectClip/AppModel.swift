@@ -299,12 +299,19 @@ final class AppModel: ObservableObject {
         try? store?.data(for: entry)
     }
 
-    private func capture(_ objects: [FMObject]) {
+    func capture(_ objects: [FMObject]) {
         guard let store else { return }
         let before = Set(store.folders)
         defer { expandNewFolders(since: before) }
         for obj in objects {
-            do { try store.add(obj.data, cls: obj.cls) } catch { errorMessage = "Cannot keep the capture: \(error.localizedDescription)" }
+            do {
+                try store.add(obj.data, cls: obj.cls)
+                // A copy from FileMaker Pro is kept as it is. If the portal check finds a problem, say so now,
+                // because Copy Entry asks before it copies this entry.
+                if let message = PortalCheck.message(cls: obj.cls, data: obj.data) {
+                    errorMessage = "The app kept the capture, but Copy Entry will ask before it copies it.\n" + message
+                }
+            } catch { errorMessage = "Cannot keep the capture: \(error.localizedDescription)" }
         }
         refresh()
     }
@@ -315,12 +322,15 @@ final class AppModel: ObservableObject {
 
     /// Puts the entry on the clipboard with its class. The watcher ignores this change, so it makes no new entry.
     /// The entry keeps its time and its place, also when FileMaker Pro writes the clipboard again (see RestoreRecord).
-    /// A layout entry with a portal child outside the first portal row stays off the clipboard (PortalCheck).
-    func copy(_ entry: HistoryEntry, to pasteboard: NSPasteboard = .general) {
+    /// For a layout entry with a portal child outside the first portal row (PortalCheck), the app asks first.
+    /// `checked: false` copies without the check (after "Copy Anyway").
+    func copy(_ entry: HistoryEntry, to pasteboard: NSPasteboard = .general, checked: Bool = true) {
         guard let store else { return }
         do {
-            if let message = PortalCheck.message(cls: entry.cls, data: try store.data(for: entry)) {
-                errorMessage = "Cannot copy the entry.\n" + message
+            if checked, let message = PortalCheck.message(cls: entry.cls, data: try store.data(for: entry)) {
+                askPortalCopy(message) { [weak self] ok in
+                    if ok { self?.copy(entry, to: pasteboard, checked: false) }
+                }
                 return
             }
             guard let count = try store.copy(entry, to: pasteboard) else { errorMessage = "The clipboard refused the data."; return }
@@ -329,6 +339,33 @@ final class AppModel: ObservableObject {
         } catch {
             errorMessage = "Cannot read the entry \(entry.id): \(error.localizedDescription)"
         }
+    }
+
+    /// Asks before a copy of an entry that the portal check refuses, and calls the answer (true: copy).
+    /// Nil shows the sheet on the window. Tests set it, because a test can not click a sheet.
+    var confirmPortalCopy: ((_ message: String, _ answer: @escaping (Bool) -> Void) -> Void)?
+
+    private func askPortalCopy(_ message: String, answer: @escaping (Bool) -> Void) {
+        if let confirmPortalCopy { return confirmPortalCopy(message, answer) }
+        let alert = Self.portalCopyAlert(message: message)
+        let done = { (response: NSApplication.ModalResponse) in answer(response == .alertSecondButtonReturn) }
+        // A sheet, not runModal: a modal loop that starts in the key monitor does not get the keyboard.
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window, completionHandler: done)
+        } else {
+            done(alert.runModal())
+        }
+    }
+
+    /// The question before a copy that the portal check refuses. Cancel is the default button, so Return does not
+    /// copy. The second button copies anyway.
+    static func portalCopyAlert(message: String) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "Copy this layout entry anyway?"
+        alert.informativeText = message
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Copy Anyway")
+        return alert
     }
 
     private func showCopied(_ id: HistoryEntry.ID) {

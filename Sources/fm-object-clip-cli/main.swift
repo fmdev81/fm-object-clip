@@ -18,10 +18,12 @@ Read commands:
   info                        the FileMaker objects on the clipboard now
 
 Write commands:
-  add FILE.xml --class C [--name NAME] [--folder NAME]
+  add FILE.xml --class C [--name NAME] [--folder NAME] [--force]
                               add an entry from a file (same rules as a capture: the same class
-                              and XML gives no new entry, it updates the name and the folder)
-  restore ID                  put the entry on the clipboard, with its class (then Cmd+V in FileMaker)
+                              and XML gives no new entry, it updates the name and the folder);
+                              XML2 with a portal child outside the first row stops, unless --force
+  restore ID [--force]        put the entry on the clipboard, with its class (then Cmd+V in FileMaker);
+                              the same portal check as add, unless --force
   rename ID NAME              give the entry a name; NAME "" gives the automatic title again
   move ID FOLDER              move the entry to the folder (made if necessary)
   move ID --no-folder         take the entry out of its folder
@@ -75,9 +77,10 @@ func fail(_ code: ExitCode, _ message: String) -> CLIError {
 }
 
 /// Stops add and restore for a layout clip with a portal child outside the first portal row (PortalCheck).
-/// FileMaker pastes such a child as an object that the user cannot select.
-func refuseBadPortals(_ cls: FMClass, _ data: Data) throws {
-    if let message = PortalCheck.message(cls: cls, data: data) { throw fail(.error, message) }
+/// FileMaker pastes such a child as an object that the user cannot select. `--force` skips the check.
+func refuseBadPortals(_ cls: FMClass, _ data: Data, _ args: Arguments) throws {
+    guard !args.flags.contains("--force"), let message = PortalCheck.message(cls: cls, data: data) else { return }
+    throw fail(.error, message + "\nTo go on anyway, add --force.")
 }
 
 // MARK: - Arguments
@@ -266,20 +269,20 @@ func run(_ args: Arguments) throws {
         }
 
     case "add":
-        try need(args, 2, "add FILE.xml --class C [--name NAME] [--folder NAME]")
+        try need(args, 2, "add FILE.xml --class C [--name NAME] [--folder NAME] [--force]")
         guard let cls = try parseClass(args.values["--class"]) else { throw fail(.usage, "add needs --class C") }
         guard let data = FileManager.default.contents(atPath: p[1]) else { throw fail(.notFound, "cannot read the file \(p[1])") }
         guard !data.isEmpty else { throw fail(.error, "the file \(p[1]) is empty") }
-        try refuseBadPortals(cls, data)
+        try refuseBadPortals(cls, data, args)
         let store = try openStore(args)
         let e = try store.add(data, cls: cls, name: args.values["--name"], folder: args.values["--folder"], source: "cli")
         if args.json { printJSON(entryJSON(e, store)) } else { print(line(e)) }
 
     case "restore":
-        try need(args, 2, "restore ID")
+        try need(args, 2, "restore ID [--force]")
         let store = try openStore(args)
         let e = try entryOrFail(store, p[1])
-        try refuseBadPortals(e.cls, try store.data(for: e))
+        try refuseBadPortals(e.cls, try store.data(for: e), args)
         guard try store.copy(e) != nil else { throw fail(.error, "the clipboard refused the data") }
         if args.json { printJSON(entryJSON(e, store)) } else { print("clipboard set: \(e.cls.rawValue), \(e.displayTitle)") }
 
@@ -402,6 +405,10 @@ func run(_ args: Arguments) throws {
                 do {
                     let e = try store.add(obj.data, cls: obj.cls)
                     if json { printJSON(entryJSON(e, store), pretty: false) } else { print(line(e)) }
+                    // A copy from FileMaker Pro is kept as it is; restore needs --force for it.
+                    if let message = PortalCheck.message(cls: obj.cls, data: obj.data) {
+                        FileHandle.standardError.write(Data("warning: \(e.id): \(message)\n".utf8))
+                    }
                 } catch {
                     FileHandle.standardError.write(Data("error: \(error.localizedDescription)\n".utf8))
                 }
