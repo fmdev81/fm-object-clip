@@ -325,7 +325,7 @@ func run(_ args: Arguments) throws {
                 let existing = store.existingFolder(p[2]) ?? p[2]
                 let moved = try store.deleteFolder(p[2])
                 if args.json { printJSON(["name": existing, "movedEntries": moved]) } else {
-                    print("deleted folder\t\(existing)\t\(moved) entries to \(store.settings.displayName)")
+                    print("deleted folder\t\(existing)\t\(count(moved, "entry", "entries")) to \(store.settings.displayName)")
                 }
             case "move":
                 try need(args, 4, "folder move NAME POSITION")
@@ -428,7 +428,7 @@ func runSettings(_ args: Arguments) throws {
         printJSON(j)
     } else {
         print("\(p[2])\t\(settings.value(of: p[2]) ?? "")")
-        if !gone.isEmpty { print("deleted \(gone.count) oldest uncategorized entries") }
+        if !gone.isEmpty { print("deleted \(count(gone.count, "oldest uncategorized entry", "oldest uncategorized entries"))") }
     }
 }
 

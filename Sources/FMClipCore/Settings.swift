@@ -45,6 +45,14 @@ public struct ClipSettings: Codable, Equatable, Sendable {
         HistoryStore.cleanName(uncategorizedName) ?? Self.defaultUncategorizedName
     }
 
+    /// The limit of the text in the Settings field: a whole number (spaces and group separators are ignored),
+    /// clamped to the permitted range. Nil when the text is not a number.
+    public static func limit(fromText text: String) -> Int? {
+        let digits = text.filter { !$0.isWhitespace && $0 != "," && $0 != "\u{00A0}" && $0 != "'" }
+        guard !digits.isEmpty, let n = Int(digits) else { return nil }
+        return clampLimit(n)
+    }
+
     /// The limit in the permitted range.
     public static func clampLimit(_ n: Int) -> Int {
         min(max(n, limitRange.lowerBound), limitRange.upperBound)

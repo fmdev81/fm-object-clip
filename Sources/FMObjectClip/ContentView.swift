@@ -329,6 +329,7 @@ struct GroupRow: View {
     let first: Bool
     @State private var hover = false
     @State private var targeted = false
+    @State private var dropActive = false
     @State private var line: VerticalEdge?
 
     var body: some View {
@@ -363,7 +364,12 @@ struct GroupRow: View {
         .modifier(FolderDragSource(folder: folder))
         .padding(.top, first ? 0 : 10)
         .padding(.bottom, 2)
-        .onHover { hover = $0 }
+        .onHover {
+            hover = $0
+            // A safety net: no drag is over the row when the pointer moves over it again or leaves it.
+            targeted = false
+            line = nil
+        }
         .onTapGesture {
             model.selection = nil
             if let folder { model.selectedFolder = folder } else { model.selectedFolder = nil; model.selectedNoFolder = true }
@@ -387,7 +393,8 @@ struct GroupRow: View {
             Button("New Folder…") { model.startNewFolder() }
         }
         .onDrop(of: [.fmFolder, .plainText, .text], delegate: GroupDropDelegate(
-            model: model, folder: folder, top: first ? 0 : 10, height: 28, targeted: $targeted, line: $line))
+            model: model, folder: folder, top: first ? 0 : 10, height: 28, active: $dropActive,
+            targeted: $targeted, line: $line))
         .help(expanded ? "Click to collapse" : "Click to expand")
     }
 }
@@ -498,14 +505,25 @@ struct HistoryOverrideNote: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "externaldrive.badge.questionmark")
-            Text("History: \(folder.lastPathComponent)").lineLimit(1).truncationMode(.middle)
+            Text("History: \(Self.shortPath(folder))").lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 0)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .background(.bar)
+        .overlay(Divider().opacity(0.5), alignment: .top)
         .help("This window uses the history folder \(folder.path) (launch argument -HistoryFolder).")
         .accessibilityElement(children: .combine)
+    }
+
+    /// The path with the home folder as `~`, for example `~/Desktop/demo/history`.
+    static func shortPath(_ folder: URL, home: String = NSHomeDirectory()) -> String {
+        let path = folder.standardizedFileURL.path
+        let home = (home as NSString).standardizingPath
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
+        return path
     }
 }

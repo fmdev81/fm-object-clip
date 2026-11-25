@@ -91,7 +91,7 @@ The history is in `~/Library/Application Support/fm-object-clip/history/`. Your 
 
 The files are plain XML and JSON. Scripts and agents can read them without the app.
 
-For tests and demos, start the app with `-HistoryFolder PATH`, for example `open -n build/FMObjectClip.app --args -HistoryFolder ~/Desktop/demo-history`. The app then uses that folder in place of the real history: it reads and writes the entries, the folders and the settings there, and the safety backups of a restore go to the `backups` folder next to it. A note under the list shows the name of the folder, and **About fm-object-clip** shows the full path. A leading `~` is your home folder. With no argument, or an empty one, the app uses the real history. The CLI uses `--history DIR` for the same purpose.
+For tests and demos, start the app with `-HistoryFolder PATH`, for example `open -n build/FMObjectClip.app --args -HistoryFolder ~/Desktop/demo-history`. The app then uses that folder in place of the real history: it reads and writes the entries, the folders and the settings there, and the safety backups of a restore go to the `backups` folder next to it. A note under the list shows the path of the folder (`~` for your home folder), and **About fm-object-clip** shows the full path. A leading `~` is your home folder. With no argument, or an empty one, the app uses the real history. The CLI uses `--history DIR` for the same purpose.
 
 ## Backup
 
@@ -163,7 +163,7 @@ To open the Settings window, select **fm-object-clip** > **Settings…** (Cmd+,)
 | Uncategorized group | Uncategorized | The name of the group for the entries in no folder. The name is also the item in the **Move to Folder** menus. It changes only the label: the entries do not change. A blank name gives "Uncategorized". |
 | Uncategorized limit | 500 | The maximum number of uncategorized entries, from 10 to 100000. When a new capture goes over the limit, the app deletes the oldest uncategorized entries. Entries in folders do not count, and the app never deletes them. |
 
-If you set a limit that is lower than the number of uncategorized entries now, the app asks first, for example "Delete the 40 oldest uncategorized entries?". Click **OK** to delete them at once. Click **Cancel** to keep the old limit.
+The app uses a new limit when you press Return, leave the field, or click the arrows. While you type, it asks nothing. If you set a limit that is lower than the number of uncategorized entries now, the app asks first, for example "Delete the 40 oldest uncategorized entries?". Click **OK** to delete them at once. Click **Cancel** to keep the old limit.
 
 The settings are in the file `settings.json` in the history folder:
 

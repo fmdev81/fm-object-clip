@@ -34,6 +34,32 @@ struct FolderDragSource: ViewModifier {
     }
 }
 
+/// What a drag over a group row carries.
+enum GroupDropPayload: Equatable {
+    /// A folder row (`UTType.fmFolder`): the drop changes the order of the folders.
+    case folder
+    /// An entry row (plain text: the entry id): the drop moves the entry to the folder of the row.
+    case entry
+
+    /// A payload decides the branch of `performDrop`. Decide it with `DropInfo.hasItemsConforming(to:)`, not with
+    /// `itemProviders(for: [.fmFolder])`: for an entry drag that call still returns one provider (with no type), and
+    /// the folder branch then took the drop, failed to load it (NSItemProviderErrorDomain -1000), and the entry did
+    /// not move.
+    static func of(hasFolderItems: Bool) -> GroupDropPayload { hasFolderItems ? .folder : .entry }
+
+    /// The feedback on the row: the fill for an entry drag, the insertion line for a folder drag. Nothing when the
+    /// drag is not active over the row. SwiftUI can call `dropUpdated` once more after `performDrop` and
+    /// `dropExited`; with `active` false that late call must not show the feedback again (else the row stays
+    /// highlighted after the drop).
+    static func feedback(_ payload: GroupDropPayload, active: Bool, after: Bool) -> (targeted: Bool, line: VerticalEdge?) {
+        guard active else { return (false, nil) }
+        switch payload {
+        case .folder: return (false, after ? .bottom : .top)
+        case .entry: return (true, nil)
+        }
+    }
+}
+
 /// The drop target of a group row: folders (to change the order) and entries (to move them).
 struct GroupDropDelegate: DropDelegate {
     let model: AppModel
@@ -42,43 +68,60 @@ struct GroupDropDelegate: DropDelegate {
     /// The empty space above the row, in the drop area (see GroupRow).
     let top: CGFloat
     let height: CGFloat
+    /// True from `dropEntered` until the drag leaves the row or drops on it.
+    @Binding var active: Bool
     /// True while an entry drag is over the row.
     @Binding var targeted: Bool
     /// The insertion line while a folder drag is over the row: top (before the row) or bottom (after the row).
     @Binding var line: VerticalEdge?
 
-    private func isFolder(_ info: DropInfo) -> Bool { info.hasItemsConforming(to: [.fmFolder]) }
+    private func payload(_ info: DropInfo) -> GroupDropPayload {
+        .of(hasFolderItems: info.hasItemsConforming(to: [.fmFolder]))
+    }
 
     /// True when the dropped folder goes after this row. On "No Folder" the folder goes last, before this row.
     private func after(_ info: DropInfo) -> Bool {
         folder != nil && FolderOrder.isLowerHalf(y: info.location.y, top: top, height: height)
     }
 
-    func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.fmFolder, .plainText, .text])
+    private func show(_ info: DropInfo) {
+        let feedback = GroupDropPayload.feedback(payload(info), active: active, after: after(info))
+        if targeted != feedback.targeted { targeted = feedback.targeted }
+        if line != feedback.line { line = feedback.line }
     }
 
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        if isFolder(info) {
-            targeted = false
-            line = after(info) ? .bottom : .top
-        } else {
-            targeted = true
-            line = nil
-        }
-        return DropProposal(operation: .move)
-    }
-
-    func dropExited(info: DropInfo) {
+    /// The end of the drag over this row (exit, drop, or cancel): the feedback always goes.
+    private func end() {
+        active = false
         targeted = false
         line = nil
     }
 
+    func validateDrop(info: DropInfo) -> Bool {
+        return info.hasItemsConforming(to: [.fmFolder, .plainText, .text])
+    }
+
+    func dropEntered(info: DropInfo) {
+        active = true
+        show(info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        show(info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        end()
+    }
+
     func performDrop(info: DropInfo) -> Bool {
-        defer { dropExited(info: info) }
-        if let provider = info.itemProviders(for: [.fmFolder]).first {
+        end()
+        let (model, target) = (model, folder)
+        switch payload(info) {
+        case .folder:
+            guard let provider = info.itemProviders(for: [.fmFolder]).first else { return false }
             let after = after(info)
-            let (model, target) = (model, folder)
             provider.loadDataRepresentation(forTypeIdentifier: FolderOrder.dragType) { data, _ in
                 guard let data, let name = String(data: data, encoding: .utf8) else { return }
                 DispatchQueue.main.async {
@@ -88,11 +131,21 @@ struct GroupDropDelegate: DropDelegate {
                 }
             }
             return true
+        case .entry:
+            return moveEntry(info, to: target)
         }
-        guard let provider = info.itemProviders(for: [.plainText, .text]).first else { return false }
-        let (model, target) = (model, folder)
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            guard let id = object as? String else { return }
+    }
+
+    /// An entry drop: the entry id is UTF-8 plain text.
+    private func moveEntry(_ info: DropInfo, to target: String?) -> Bool {
+        let model = model
+        guard let provider = info.itemProviders(for: [.plainText, .text]).first,
+              let type = [UTType.utf8PlainText, .plainText, .text].first(where: {
+                  provider.hasItemConformingToTypeIdentifier($0.identifier) })
+        else { return false }
+        provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+            guard let data, let id = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !id.isEmpty else { return }
             DispatchQueue.main.async { model.move(id, to: target) }
         }
         return true
