@@ -19,8 +19,8 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `xml ID` | The stored XML bytes, to stdout. |
 | `folders` | The folders, in the order of the list, and the number of entries in each. |
 | `info` | The FileMaker objects on the clipboard now. |
-| `add FILE.xml --class C [--name NAME] [--folder NAME]` | Adds an entry from a file, with the rules of a capture. If the class and the XML are the same as an entry, it updates the name and the folder of that entry. |
-| `restore ID` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. |
+| `add FILE.xml --class C [--name NAME] [--folder NAME] [--force]` | Adds an entry from a file, with the rules of a capture. If the class and the XML are the same as an entry, it updates the name and the folder of that entry. For `XML2`, the tool does the [portal check](#portal-check) first. |
+| `restore ID [--force]` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. For `XML2`, the tool does the [portal check](#portal-check) first. |
 | `rename ID NAME` | Gives the entry a name. `""` gives the automatic title again. |
 | `move ID FOLDER` | Moves the entry to the folder. The tool makes the folder if necessary. |
 | `move ID --no-folder` | Takes the entry out of its folder. It goes to the uncategorized group. |
@@ -34,10 +34,27 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `backup FILE [--force]` | Writes the full history to one backup file (see [Backup](DEVELOPMENT.md#backup-file-format)). The tool does not overwrite a file that exists, except with `--force`. |
 | `import-backup FILE` | Merge: adds the entries of the backup that are not in the history, and the missing folders. The settings do not change. |
 | `import-backup FILE --replace` | Replace: replaces the full history and the settings with the backup. First, the tool saves the current history to the `backups` folder next to the history folder. |
-| `watch` | Adds each FileMaker object on the clipboard to the history, without the app. |
+| `watch` | Adds each FileMaker object on the clipboard to the history, without the app. If a layout object fails the [portal check](#portal-check), the tool keeps it and writes a warning to stderr. |
 | `help`, `--help` | Shows the help. |
 
 `C` is `XMSS`, `XMTB`, `XMFD` or `XML2`.
+
+## Portal check
+
+FileMaker Pro pastes a portal child outside the first portal row as an object that you cannot select in Layout mode. So for layout objects (`XML2`), the tool and the app check each portal child before they use the XML:
+
+- In the XML, the bounds of a portal child start at the top left of the portal, not of the layout. The bounds of an object in a group start at the top left of the group.
+- The child must be in the portal and in the first row. The row height is the portal height divided by `numOfRows`.
+- FileMaker Pro writes -1 for a child on the portal border, so the check allows 1 point outside.
+
+What happens when the check fails:
+
+| Where | Result |
+|---|---|
+| A copy in FileMaker Pro (the app, `watch`) | The entry is kept as FileMaker Pro wrote it. The app shows a warning. `watch` writes a warning to stderr. |
+| `add` | Stops with exit code 1, and adds nothing. `--force` adds the entry anyway. |
+| `restore` | Stops with exit code 1, and the clipboard does not change. `--force` puts the entry on the clipboard anyway. |
+| **Copy Entry** in the app | The app asks first. **Cancel** leaves the clipboard as it was. **Copy Anyway** copies the entry. |
 
 ## JSON
 
