@@ -66,18 +66,55 @@ The pasteboard type of a class is `CorePasteboardFlavorType 0x` followed by the 
 
 ## Name and folder from the clipboard
 
-Any tool that puts FileMaker objects on the clipboard can add these classes to name the entry and file it in a folder. The data is UTF-8 text. FileMaker Pro does not know these classes, so it pastes the FileMaker class only.
+A tool that puts FileMaker objects on the clipboard can add two more classes. They give the entry a name and put it in a folder. FileMaker Pro does not know these classes, so it pastes the FileMaker class only.
 
 | Class | Pasteboard type | Value |
 |---|---|---|
 | `FOPN` | `CorePasteboardFlavorType 0x464F504E` | The name of the entry |
 | `FOPF` | `CorePasteboardFlavorType 0x464F5046` | The folder of the entry |
 
-- Put them in the same clipboard write as the FileMaker class. Each class is optional.
-- The app removes the spaces at the start and the end. An empty value is the same as no value.
-- If the folder does not exist, the app makes it. If the class and the XML are the same as an entry, the app updates the name and the folder of that entry. Without `FOPF`, an entry stays in its folder.
+Each class is optional. The app capture, `fm-object-clip-cli watch` and `fm-object-clip-cli info` read them.
+
+### Write all the classes in one clipboard write
+
+The change count of the clipboard changes when a program clears it or declares its types. It does not change when the program sets the data of one more type. The app checks the change count every 0.4 seconds. If the app checks between two `setData` calls, it can see the FileMaker class without the name.
+
+Do this:
+
+1. Declare all the types at once: the FileMaker class, `FOPN` and `FOPF`.
+2. Set the data of each type at once, with no wait between the calls.
+
+```swift
+let fm = NSPasteboard.PasteboardType("CorePasteboardFlavorType 0x584D5353")    // XMSS
+let name = NSPasteboard.PasteboardType("CorePasteboardFlavorType 0x464F504E")  // FOPN
+let folder = NSPasteboard.PasteboardType("CorePasteboardFlavorType 0x464F5046") // FOPF
+let pb = NSPasteboard.general
+pb.declareTypes([fm, name, folder], owner: nil)
+pb.setData(xmlData, forType: fm)
+pb.setData(Data("Invoice - Create PDF".utf8), forType: name)
+pb.setData(Data("Invoicing".utf8), forType: folder)
+```
+
+Do not use `clearContents` and then one `setData` call for each type: then the types arrive one by one. Do not use `NSPasteboardItem` with these type names. It refuses them (`setData` returns false and logs "is not a valid UTI string").
+
+As a safety net, the app reads the clipboard again at each check for 2 seconds after a change. If the objects, the name or the folder change in that time, the app updates the same entry. But until the folder arrives, the entry is in the **Uncategorized** group and counts for the Uncategorized limit. At the limit, that can delete the oldest uncategorized entry. So write all the classes at once.
+
+### How the app reads the values
+
+- The data must be UTF-8 text. Data that is not valid UTF-8 is the same as no value.
+- Line breaks and tabs become spaces. The app removes the other control characters (for example NUL).
+- The app removes the spaces at the start and the end, and keeps the first 200 characters.
+- An empty value is the same as no value.
+- If one clipboard write has more than one FileMaker class, each object gets the same name and the same folder. FileMaker Pro itself puts one of these classes on the clipboard at a time.
+
+### What the app does with them
+
+- If the folder does not exist, the app makes it. The match with an existing folder ignores case: `project a` goes into `Project A`.
+- An entry with a folder is not in the **Uncategorized** group, so it does not count for the Uncategorized limit, and the app never deletes it for the limit. An entry with no `FOPF` goes to the **Uncategorized** group and counts. It can make the app delete the oldest uncategorized entry.
+- A folder value that is the name of the Uncategorized group is the same as no folder. The app compares it with the name in Settings and with the default name "Uncategorized", and ignores case. So no folder named "Uncategorized" is made. The exception: if you made a folder with that name yourself, the entry goes into that folder.
+- If the class and the XML are the same as an entry, the app does not make a new entry. It moves that entry to the top, and a new name or a new folder replaces the old one. With a folder, the entry leaves the **Uncategorized** group. With no `FOPF` (or the Uncategorized name), the entry stays in its folder.
 - **Copy Entry** and `fm-object-clip-cli restore` put the FileMaker class only, not the name or the folder.
-- `fm-object-clip-cli watch` and `info` read the same classes.
+- The rule for the Uncategorized name is for the clipboard only. `fm-object-clip-cli add --folder Uncategorized` makes a folder with that name, as before.
 
 ## History files
 
