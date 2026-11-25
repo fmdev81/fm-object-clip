@@ -153,8 +153,12 @@ final class AppModel: ObservableObject {
     private static let noFolderCollapsedKey = "noFolderCollapsed"
     @Published var errorMessage: String?
     @Published var showXML = false
+    /// The settings from `settings.json` (see AppSettings.swift). The app reloads them when the file changes.
+    @Published var settings = ClipSettings() { didSet { if settings.appearance != oldValue.appearance { applyAppearance() } } }
+    /// True for the real app. Tests do not change the appearance of the process.
+    private(set) var appliesAppearance = false
 
-    private var store: HistoryStore?
+    private(set) var store: HistoryStore?
     private var watcher: ClipboardWatcher?
     private var textCache: [String: String] = [:]
     private var summaryCache: [String: String?] = [:]
@@ -171,11 +175,14 @@ final class AppModel: ObservableObject {
             self.store = store
             entries = store.entries
             folders = store.folders
+            settings = store.settings
         } catch {
             errorMessage = "Cannot open the history in \(HistoryStore.defaultFolder.path): \(error.localizedDescription)"
             return
         }
         guard watch else { return }
+        appliesAppearance = true
+        applyAppearance()
         let watcher = ClipboardWatcher(onOther: { [weak self] in self?.store?.forgetRestore() }) { [weak self] objects in
             self?.capture(objects)
         }
@@ -193,6 +200,8 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         let before = Set(folders)
         do { try store.reload() } catch { return }  // a half-written file can not occur (atomic writes); try at the next change
+        let newSettings = store.settings
+        if newSettings != settings { settings = newSettings }
         guard store.entries != entries || store.folders != folders else { return }
         refresh()
         expandNewFolders(since: before)
@@ -303,7 +312,7 @@ final class AppModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1, execute: clear)
     }
 
-    private func refresh() {
+    func refresh() {
         guard let store else { return }
         entries = store.entries
         folders = store.folders

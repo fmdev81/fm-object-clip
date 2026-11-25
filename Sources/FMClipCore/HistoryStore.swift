@@ -62,11 +62,12 @@ public final class HistoryStore {
             .appendingPathComponent("fm-object-clip/history", isDirectory: true)
     }
 
-    /// The size of the history. When a new entry goes over the limit, the store deletes the oldest entry.
-    public static let maxEntries = 200
-
     public let folder: URL
-    public let limit: Int
+    /// A fixed limit for the uncategorized entries (tests), or nil to use `uncategorizedLimit` from `settings.json`.
+    var fixedLimit: Int?
+    /// The maximum number of uncategorized entries (entries in no folder). When a change goes over the limit, the
+    /// store deletes the oldest uncategorized entries. Entries in folders do not count, and the store never deletes them.
+    public var limit: Int { fixedLimit ?? settings.uncategorizedLimit }
     public private(set) var entries: [HistoryEntry] = []
     /// The folders, in the order of the user (new folders at the end). Folders are flat.
     public private(set) var folders: [String] = []
@@ -78,9 +79,11 @@ public final class HistoryStore {
     private var lockURL: URL { folder.appendingPathComponent(".lock") }
     private var restoreURL: URL { folder.appendingPathComponent(".last-restore.json") }
 
-    public init(folder: URL = HistoryStore.defaultFolder, limit: Int = HistoryStore.maxEntries) throws {
+    /// - Parameters:
+    ///   - limit: a fixed limit for the uncategorized entries. Nil (the default) uses the limit in `settings.json`.
+    public init(folder: URL = HistoryStore.defaultFolder, limit: Int? = nil) throws {
         self.folder = folder
-        self.limit = limit
+        self.fixedLimit = limit
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try withLock { try repair() }
     }
@@ -99,7 +102,7 @@ public final class HistoryStore {
 
     /// Runs body with the exclusive lock of the history, after a reload of the files on disk.
     /// Do not call a method that locks from inside body: a second lock in the same process waits for ever.
-    private func withLock<T>(_ body: () throws -> T) throws -> T {
+    func withLock<T>(_ body: () throws -> T) throws -> T {
         let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o644)
         guard fd >= 0 else { throw StoreError.lock(lockURL.path) }
         defer { close(fd) }
@@ -261,12 +264,28 @@ public final class HistoryStore {
         }
     }
 
-    /// The size limit counts all the entries, but deletes only the oldest entries that are in no folder.
-    private func trimToLimit() {
-        while entries.count > limit, let i = entries.lastIndex(where: { $0.folder == nil }) {
-            let old = entries.remove(at: i)
-            try? FileManager.default.removeItem(at: fileURL(for: old))
+    /// Deletes the oldest uncategorized entries over the limit, and returns them. The limit counts only the entries in
+    /// no folder. Call it under the lock.
+    @discardableResult
+    func trimToLimit() -> [HistoryEntry] {
+        var excess = uncategorizedCount - limit
+        guard excess > 0 else { return [] }
+        var gone: [HistoryEntry] = []
+        var i = entries.count - 1
+        while excess > 0, i >= 0 {
+            if entries[i].folder == nil {
+                gone.append(entries.remove(at: i))
+                excess -= 1
+            }
+            i -= 1
         }
+        for old in gone { try? FileManager.default.removeItem(at: fileURL(for: old)) }
+        return gone
+    }
+
+    /// The number of uncategorized entries (entries in no folder).
+    public var uncategorizedCount: Int {
+        entries.reduce(0) { $0 + ($1.folder == nil ? 1 : 0) }
     }
 
     /// Gives the entry a name. An empty name removes the name, and the entry shows its automatic title again.

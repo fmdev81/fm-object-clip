@@ -28,7 +28,15 @@ Write commands:
   delete ID [ID ...]          delete the entries (all the IDs must exist, else nothing is deleted)
   folder new NAME             make a folder
   folder rename OLD NEW       rename a folder; its entries go with it
-  folder delete NAME          delete a folder; its entries go to No Folder
+  folder delete NAME          delete a folder; its entries go to the uncategorized group
+
+Settings (settings.json in the history folder, shared with the app):
+  settings                    show the settings
+  settings set KEY VALUE      set one setting:
+                                appearance           system, light or dark
+                                uncategorized-name   the name of the group of entries in no folder
+                                uncategorized-limit  \(ClipSettings.limitRange.lowerBound) to \(ClipSettings.limitRange.upperBound); a lower limit deletes the
+                                                     oldest uncategorized entries at once
 
 Other:
   watch                       add each FileMaker object on the clipboard to the history (Ctrl+C to stop)
@@ -307,7 +315,7 @@ func run(_ args: Arguments) throws {
                 let existing = store.existingFolder(p[2]) ?? p[2]
                 let moved = try store.deleteFolder(p[2])
                 if args.json { printJSON(["name": existing, "movedEntries": moved]) } else {
-                    print("deleted folder\t\(existing)\t\(moved) entries to No Folder")
+                    print("deleted folder\t\(existing)\t\(moved) entries to \(store.settings.displayName)")
                 }
             default:
                 throw fail(.usage, "unknown folder command \(p[1]); use new, rename or delete")
@@ -319,6 +327,9 @@ func run(_ args: Arguments) throws {
             case .exists: throw fail(.error, error.localizedDescription)
             }
         }
+
+    case "settings":
+        try runSettings(args)
 
     case "watch":
         try need(args, 1, "watch")
@@ -341,6 +352,39 @@ func run(_ args: Arguments) throws {
 
     default:
         throw fail(.usage, "unknown command \(p[0]); run fm-object-clip-cli help")
+    }
+}
+
+/// `settings` and `settings set KEY VALUE`.
+func runSettings(_ args: Arguments) throws {
+    let p = args.positional
+    if p.count == 1 {
+        printSettings(try openStore(args).settings, json: args.json)
+        return
+    }
+    guard p.count == 4, p[1] == "set" else { throw fail(.usage, "usage: fm-object-clip-cli settings [set KEY VALUE]") }
+    var check = ClipSettings()
+    do { try check.set(p[2], to: p[3]) } catch { throw fail(.usage, error.localizedDescription) }  // before the store opens
+    let store = try openStore(args)
+    let gone = try store.updateSettings { try? $0.set(p[2], to: p[3]) }
+    let settings = store.settings
+    if args.json {
+        var j = settingsJSON(settings)
+        j["deletedEntries"] = gone.count
+        printJSON(j)
+    } else {
+        print("\(p[2])\t\(settings.value(of: p[2]) ?? "")")
+        if !gone.isEmpty { print("deleted \(gone.count) oldest uncategorized entries") }
+    }
+}
+
+func settingsJSON(_ s: ClipSettings) -> [String: Any] {
+    ["appearance": s.appearance, "uncategorizedName": s.displayName, "uncategorizedLimit": s.uncategorizedLimit]
+}
+
+func printSettings(_ s: ClipSettings, json: Bool) {
+    if json { printJSON(settingsJSON(s)) } else {
+        for key in ClipSettings.keys { print("\(key)\t\(s.value(of: key) ?? "")") }
     }
 }
 
