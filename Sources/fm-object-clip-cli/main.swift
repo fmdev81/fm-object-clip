@@ -360,7 +360,7 @@ func run(_ args: Arguments) throws {
             printJSON(["file": url.path, "entries": backup.items.count, "folders": backup.folders.count,
                        "settings": backup.settings != nil])
         } else {
-            print("backup written\t\(url.path)\t\(backup.items.count) entries\t\(backup.folders.count) folders")
+            print("backup written\t\(url.path)\t\(count(backup.items.count, "entry", "entries"))\t\(count(backup.folders.count, "folder"))")
         }
 
     case "import-backup":
@@ -373,7 +373,7 @@ func run(_ args: Arguments) throws {
             if args.json {
                 printJSON(["mode": "replace", "entries": r.entries, "folders": r.folders, "safetyBackup": r.safetyBackup.path])
             } else {
-                print("history replaced\t\(r.entries) entries\t\(r.folders) folders\tsafety backup \(r.safetyBackup.path)")
+                print("history replaced\t\(count(r.entries, "entry", "entries"))\t\(count(r.folders, "folder"))\tsafety backup \(r.safetyBackup.path)")
             }
         } else {
             let r = try store.merge(backup)
@@ -381,7 +381,7 @@ func run(_ args: Arguments) throws {
                 printJSON(["mode": "merge", "added": r.added, "skippedDuplicates": r.skippedDuplicates,
                            "foldersAdded": r.foldersAdded])
             } else {
-                print("merged\t\(r.added) added\t\(r.skippedDuplicates) duplicates skipped\t\(r.foldersAdded) folders added")
+                print("merged\t\(r.added) added\t\(count(r.skippedDuplicates, "duplicate")) skipped\t\(count(r.foldersAdded, "folder")) added")
             }
         }
 
@@ -434,6 +434,11 @@ func runSettings(_ args: Arguments) throws {
 
 func settingsJSON(_ s: ClipSettings) -> [String: Any] {
     ["appearance": s.appearance, "uncategorizedName": s.displayName, "uncategorizedLimit": s.uncategorizedLimit]
+}
+
+/// "1 entry", "2 entries": a number and a noun, in the style of the count helper of the titles (Titles.count).
+func count(_ n: Int, _ noun: String, _ plural: String? = nil) -> String {
+    "\(n) \(n == 1 ? noun : plural ?? noun + "s")"
 }
 
 func printSettings(_ s: ClipSettings, json: Bool) {

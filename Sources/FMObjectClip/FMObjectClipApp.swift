@@ -93,6 +93,10 @@ struct ClipCommands: Commands {
                 .disabled(model.selectedFolder == nil)
             Button("Delete Folder") { if let f = model.selectedFolder { model.deleteFolder(f) } }
                 .disabled(model.selectedFolder == nil)
+            Button("Move Folder Up") { model.moveSelectedFolder(by: -1) }
+                .disabled(!model.canMoveSelectedFolder(by: -1))
+            Button("Move Folder Down") { model.moveSelectedFolder(by: 1) }
+                .disabled(!model.canMoveSelectedFolder(by: 1))
             Divider()
             BackupMenuItems(model: model)
             Divider()

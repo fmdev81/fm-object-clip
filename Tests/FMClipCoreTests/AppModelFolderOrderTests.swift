@@ -39,4 +39,28 @@ final class AppModelFolderOrderTests: XCTestCase {
         XCTAssertEqual(model.folders, ["C", "A", "B"])
         XCTAssertFalse(undo.canUndo)
     }
+
+    /// File > Move Folder Up / Move Folder Down act on the selected folder and are off without one or at the ends.
+    func testMoveSelectedFolderMenuItems() throws {
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("fm-object-clip-tests-\(UUID().uuidString)")
+        let store = try HistoryStore(folder: folder)
+        for name in ["A", "B", "C"] { try store.makeFolder(name) }
+        let model = AppModel(store: store, watch: false)
+
+        XCTAssertFalse(model.canMoveSelectedFolder(by: -1))
+        XCTAssertFalse(model.canMoveSelectedFolder(by: 1))
+        model.selectedFolder = "A"
+        XCTAssertFalse(model.canMoveSelectedFolder(by: -1))
+        XCTAssertTrue(model.canMoveSelectedFolder(by: 1))
+        model.moveSelectedFolder(by: -1)  // off at the top: no change
+        XCTAssertEqual(model.folders, ["A", "B", "C"])
+        model.moveSelectedFolder(by: 1)
+        XCTAssertEqual(model.folders, ["B", "A", "C"])
+        XCTAssertEqual(model.selectedFolder, "A")
+        model.moveSelectedFolder(by: 1)
+        XCTAssertEqual(model.folders, ["B", "C", "A"])
+        XCTAssertFalse(model.canMoveSelectedFolder(by: 1))
+        XCTAssertTrue(model.canMoveSelectedFolder(by: -1))
+        XCTAssertEqual(try HistoryStore(folder: folder).folders, ["B", "C", "A"])
+    }
 }

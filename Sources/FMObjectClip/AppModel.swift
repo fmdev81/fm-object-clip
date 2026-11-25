@@ -443,6 +443,18 @@ final class AppModel: ObservableObject {
         undoManager?.setActionName("Move Folder")
     }
 
+    /// True when the selected folder can move one place up (offset -1) or down (offset 1): File > Move Folder Up/Down.
+    func canMoveSelectedFolder(by offset: Int) -> Bool {
+        guard let f = selectedFolder, let i = folders.firstIndex(of: f) else { return false }
+        return folders.indices.contains(i + offset)
+    }
+
+    /// Moves the selected folder one place up (offset -1) or down (offset 1), with Undo.
+    func moveSelectedFolder(by offset: Int) {
+        guard canMoveSelectedFolder(by: offset), let f = selectedFolder, let i = folders.firstIndex(of: f) else { return }
+        moveFolder(f, to: i + offset)
+    }
+
     /// Moves an entry to a folder, or to no folder (nil).
     func move(_ id: HistoryEntry.ID, to folder: String?) {
         guard let store else { return }

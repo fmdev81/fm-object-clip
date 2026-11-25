@@ -50,7 +50,7 @@ Use folders to keep the entries of one project together. Folders are flat: a fol
 - If the list does not show the selected entry (after a filter, a search, or when you close its folder), the detail pane is empty.
 - To make a folder, select **File** > **New Folder…** (Cmd+Shift+N), or right-click a folder row. A new folder is open.
 - To move an entry to a folder, drag the entry to the folder row. To take an entry out of its folder, drag it to the uncategorized group. You can also select **File** > **Move to Folder**, or right-click the entry and select **Move to Folder**. Select the name of the uncategorized group (**Uncategorized**) to take the entry out of its folder.
-- To change the order of the folders, drag a folder row up or down. A line shows the new position: drop the folder on the upper half of a folder row to put it before that row, or on the lower half to put it after that row. Drop it on the uncategorized group to put it last. You can also right-click the folder row and select **Move Folder Up** or **Move Folder Down**. **Edit** > **Undo** puts the folder back. The entries stay in their folders. The uncategorized group is always after the folders, and you cannot drag it. The order stays after a restart, and the CLI command `folders` shows the same order.
+- To change the order of the folders, drag a folder row up or down. A line shows the new position: drop the folder on the upper half of a folder row to put it before that row, or on the lower half to put it after that row. Drop it on the uncategorized group to put it last. You can also right-click the folder row and select **Move Folder Up** or **Move Folder Down**, or click the folder row and select **File** > **Move Folder Up** or **Move Folder Down**. **Edit** > **Undo** puts the folder back. The entries stay in their folders. The uncategorized group is always after the folders, and you cannot drag it. The order stays after a restart, and the CLI command `folders` shows the same order.
 - To rename or delete a folder, right-click the folder row. You can also click the folder row and then select **File** > **Rename Folder…** or **Delete Folder**.
 - When you delete a folder, its entries stay in the history, in the uncategorized group.
 - The folder does not change the stored XML or the data that **Copy Entry** puts on the clipboard.
@@ -100,7 +100,8 @@ A backup is one file with the full history: all the entries with their XML, all 
   - **Merge** (the default): the app adds the entries that are not in the history. It uses the same duplicate rule as a capture: the same class and the same content. A new entry keeps its id, time, name, folder and XML bytes. If its id is in use, it gets a new id. The app adds the missing folders after the current folders. The settings do not change.
   - **Replace**: the app replaces the full history and the settings with the backup. First, it saves the current history to `~/Library/Application Support/fm-object-clip/backups/fm-object-clip-before-restore-<time>.json`. To go back, restore that file with **Replace**.
 - The app refuses a file that is not a backup, a file with an unknown version, and a damaged file. It shows an error and changes nothing.
-- A restore does not delete an entry that is in a folder. If the history has more than 200 entries after a restore, the size limit deletes the oldest entries in no folder at the next capture.
+- A restore deletes no entry. If the uncategorized group has more entries than the limit after a restore, the limit deletes the oldest uncategorized entries at the next capture. Entries in folders do not count.
+- After **Replace**, the app shows the settings of the backup at once: the appearance, the name of the uncategorized group and the limit.
 
 The backup file is UTF-8 JSON, pretty-printed, with sorted keys:
 
@@ -179,7 +180,7 @@ The app and `fm-object-clip-cli` use the same file. A change from the CLI shows 
 | Menu | Items |
 |---|---|
 | fm-object-clip | About fm-object-clip, Settings… (Cmd+,), Quit (Cmd+Q) |
-| File | Entries: Copy Entry (Cmd+C), Rename… (Cmd+R), Move to Folder, Save As… (Cmd+Shift+S), Delete (Cmd+Delete). Folders: New Folder… (Cmd+Shift+N), Rename Folder…, Delete Folder. Then Back Up History…, Restore from Backup…, Settings… and Close Window (Cmd+W). |
+| File | Entries: Copy Entry (Cmd+C), Rename… (Cmd+R), Move to Folder, Save As… (Cmd+Shift+S), Delete (Cmd+Delete). Folders: New Folder… (Cmd+Shift+N), Rename Folder…, Delete Folder, Move Folder Up, Move Folder Down. Then Back Up History…, Restore from Backup…, Settings… and Close Window (Cmd+W). |
 | Edit | The standard items. When the list has the keyboard focus, **Select All** (Cmd+A) and **Delete** act on the entries. |
 | View | All Types (Cmd+1), Scripts (Cmd+2), Tables (Cmd+3), Fields (Cmd+4), Layout (Cmd+5), Show XML (Cmd+Option+X) |
 | Window | History Window (Cmd+0) and the standard items |
