@@ -154,12 +154,16 @@ extension HistoryStore {
     @discardableResult
     public func updateSettings(_ change: (inout ClipSettings) -> Void) throws -> [HistoryEntry] {
         try withLock {
+            let oldLimit = limit
             var settings = self.settings
             change(&settings)
             settings = ClipSettings(appearance: settings.appearance, uncategorizedName: settings.uncategorizedName,
                                     uncategorizedLimit: settings.uncategorizedLimit)  // validate again
             try SettingsStore.save(settings, to: folder)
             if fixedLimit != nil { fixedLimit = settings.uncategorizedLimit }
+            // Only a new limit deletes entries. An appearance or name change never does, even when a Merge or a
+            // Replace left more uncategorized entries than the limit (the next capture trims them).
+            guard limit != oldLimit else { return [] }
             let gone = trimToLimit()
             if !gone.isEmpty { try saveIndex() }
             return gone

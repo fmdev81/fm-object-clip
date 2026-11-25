@@ -56,6 +56,8 @@ public struct Backup {
         case badData(String)
         case checksum(String)
         case duplicateID(String)
+        /// Two ids that differ only in case (or Unicode form): on a case-insensitive volume they are one file.
+        case caseDuplicateID(String, String)
 
         public var errorDescription: String? {
             switch self {
@@ -73,6 +75,8 @@ public struct Backup {
                 return "The XML data of the entry \(id) in the backup does not agree with its sha256. The file is damaged."
             case .duplicateID(let id):
                 return "The backup has the entry id \(id) two times."
+            case .caseDuplicateID(let a, let b):
+                return "The backup has the entry ids \(a) and \(b). They differ only in case, so on macOS they name the same file. The file is damaged."
             }
         }
     }
@@ -142,6 +146,7 @@ public struct Backup {
 
         var items: [Item] = []
         var ids = Set<String>()
+        var fileKeys: [String: String] = [:]  // file key → the first id with it
         for (i, raw) in list.enumerated() {
             var dict = raw
             guard let base64 = dict.removeValue(forKey: "data") as? String else { throw BackupError.badEntry(i, "no data") }
@@ -153,6 +158,9 @@ public struct Backup {
             }
             guard isSafeID(entry.id) else { throw BackupError.badEntry(i, "the id \(entry.id) is not a safe file name") }
             guard ids.insert(entry.id).inserted else { throw BackupError.duplicateID(entry.id) }
+            let key = HistoryStore.fileKey(entry.id)
+            if let other = fileKeys[key] { throw BackupError.caseDuplicateID(other, entry.id) }
+            fileKeys[key] = entry.id
             guard let bytes = Data(base64Encoded: base64) else { throw BackupError.badData(entry.id) }
             guard HistoryStore.sha256(bytes) == entry.sha256 else { throw BackupError.checksum(entry.id) }
             // The duplicate check uses the canonical key: make it from the checked bytes, do not trust the file.
@@ -233,6 +241,11 @@ extension HistoryStore {
                     return clean
                 }
                 for f in backup.folders { _ = folderName(f) }
+                // The ids in use, by file key: the index and the .xml files, without case (see `fileKey`).
+                var taken = Set(entries.map { Self.fileKey($0.id) })
+                for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasSuffix(".xml") {
+                    taken.insert(Self.fileKey(String(name.dropLast(4))))
+                }
                 for item in backup.items {
                     var entry = item.entry
                     let key = Canonical.key(for: item.data)
@@ -242,7 +255,8 @@ extension HistoryStore {
                     }
                     entry.canonical = key
                     entry.folder = folderName(entry.folder)
-                    if !isFreeID(entry.id) { entry = entry.withID(freeID(near: entry.time)) }
+                    if taken.contains(Self.fileKey(entry.id)) { entry = entry.withID(freeID(near: entry.time, taken: taken)) }
+                    taken.insert(Self.fileKey(entry.id))
                     let url = fileURL(for: entry)
                     try item.data.write(to: url, options: .atomic)
                     written.append(url)
@@ -317,9 +331,19 @@ extension HistoryStore {
                 try? saveFolders()
                 throw error
             }
-            let keep = Set(newEntries.map(\.id))
-            for old in oldEntries where !keep.contains(old.id) { try? fm.removeItem(at: fileURL(for: old)) }
+            // Remove the XML files that the new index does not use. Compare without case: on a case-insensitive volume
+            // `Original.xml` and `original.xml` are one file, and removing it would remove the new entry's XML.
+            let keepIDs = Set(newEntries.map(\.id))
+            let keepByKey = Dictionary(newEntries.map { (Self.fileKey($0.id), $0) }, uniquingKeysWith: { a, _ in a })
+            for old in oldEntries where !keepIDs.contains(old.id) {
+                let url = fileURL(for: old)
+                // Same key: remove the old file only when it is another file (a case-sensitive volume).
+                if let kept = keepByKey[Self.fileKey(old.id)], Self.isSameFile(url, fileURL(for: kept)) { continue }
+                try? fm.removeItem(at: url)
+            }
+            matchFileNameSpelling(of: newEntries)
             forgetRestore()
+            try? writeGeneration()  // after the commit point: a failure here must not report a failed Replace
             try reload()
             return ReplaceResult(entries: entries.count, folders: folders.count, safetyBackup: safety)
         }
@@ -344,18 +368,70 @@ extension HistoryStore {
     }
 
     /// True if no entry has the id and no file has its name.
-    private func isFreeID(_ id: String) -> Bool {
-        !entries.contains { $0.id == id } && !FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(id).xml").path)
+    /// The key of an id as a file name: without case and in one Unicode form, as a case-insensitive volume
+    /// (the default on macOS) compares names. Two ids with the same key can be one `.xml` file.
+    static func fileKey(_ id: String) -> String {
+        id.precomposedStringWithCanonicalMapping.folding(options: [.caseInsensitive], locale: nil)
     }
 
-    /// A new free id. It starts with the time of the entry, so the ids stay in time order.
-    private func freeID(near time: String) -> String {
+    /// On a case-insensitive volume, writing `original.xml` over `Original.xml` keeps the old spelling of the name.
+    /// Give each file the spelling of its entry id (a case-only rename), so that the next open finds no file
+    /// "with no index entry". Call it under the lock, after the commit point. A failure leaves the file readable.
+    private func matchFileNameSpelling(of entries: [HistoryEntry]) {
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { $0.hasSuffix(".xml") }
+        let byKey = Dictionary(names.map { (Self.fileKey(String($0.dropLast(4))), $0) }, uniquingKeysWith: { a, _ in a })
+        for entry in entries {
+            let expected = "\(entry.id).xml"
+            guard let actual = byKey[Self.fileKey(entry.id)], actual != expected else { continue }
+            let from = folder.appendingPathComponent(actual), to = folder.appendingPathComponent(expected)
+            guard Self.isSameFile(from, to) else { continue }  // two files on a case-sensitive volume: leave them
+            _ = from.withUnsafeFileSystemRepresentation { f in
+                to.withUnsafeFileSystemRepresentation { t in
+                    guard let f, let t else { return Int32(-1) }
+                    return Darwin.rename(f, t)
+                }
+            }
+        }
+    }
+
+    /// True when the two URLs name one file on disk (the same file number on the same volume).
+    static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        let fm = FileManager.default
+        guard let x = try? fm.attributesOfItem(atPath: a.path), let y = try? fm.attributesOfItem(atPath: b.path),
+              let fx = x[.systemFileNumber] as? UInt64, let fy = y[.systemFileNumber] as? UInt64 else { return false }
+        return fx == fy && (x[.systemNumber] as? Int) == (y[.systemNumber] as? Int)
+    }
+
+    /// A new id whose file key is not taken. It starts with the time of the entry, so the ids stay in time order.
+    private func freeID(near time: String, taken: Set<String>) -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let date = f.date(from: time) ?? Date()
         var id = Self.makeID(date)
-        while !isFreeID(id) { id = Self.makeID(date) }
+        while taken.contains(Self.fileKey(id))
+                || FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(id).xml").path) {
+            id = Self.makeID(date)
+        }
         return id
+    }
+
+    // MARK: - Generation
+
+    /// The file with the generation of the history. A Replace writes a new value; other changes keep it.
+    var generationURL: URL { folder.appendingPathComponent(".generation") }
+
+    /// The generation of the history: a new UUID after each Replace, or nil if the history was never replaced.
+    /// The app compares it after a change on disk: a new value means that its Undo actions and caches are old.
+    public var generation: String? {
+        guard let data = try? Data(contentsOf: generationURL),
+              let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// Writes a new generation. Call it under the lock.
+    private func writeGeneration() throws {
+        try Data((UUID().uuidString + "\n").utf8).write(to: generationURL, options: .atomic)
     }
 }
 

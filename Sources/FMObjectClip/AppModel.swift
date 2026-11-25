@@ -163,6 +163,9 @@ final class AppModel: ObservableObject {
     private var textCache: [String: String] = [:]
     private var summaryCache: [String: String?] = [:]
     private var xmlCache: [String: NSAttributedString] = [:]
+    /// The generation of the history that this model loaded (`HistoryStore.generation`). A Replace, also by the CLI,
+    /// writes a new one: then the Undo actions and the caches belong to the old history.
+    private var loadedGeneration: String?
 
     /// - Parameters:
     ///   - store: the history; nil opens the history of the app. Tests give a store in a temporary folder.
@@ -188,6 +191,7 @@ final class AppModel: ObservableObject {
             entries = store.entries
             folders = store.folders
             settings = store.settings
+            loadedGeneration = store.generation
         } catch {
             errorMessage = "Cannot open the history in \((store?.folder ?? Self.appHistoryFolder).path): \(error.localizedDescription)"
             return
@@ -212,6 +216,14 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         let before = Set(folders)
         do { try store.reload() } catch { return }  // a half-written file can not occur (atomic writes); try at the next change
+        let generation = store.generation
+        if generation != loadedGeneration {
+            // The history was replaced (by this app or by the CLI). An Undo of an earlier change must not act on the
+            // new history, and an id can have other XML now.
+            loadedGeneration = generation
+            undoManager?.removeAllActions()
+            clearCaches()
+        }
         let newSettings = store.settings
         if newSettings != settings { settings = newSettings }
         guard store.entries != entries || store.folders != folders else { return }
@@ -326,14 +338,30 @@ final class AppModel: ObservableObject {
 
     /// Reads the history again after a restore from a backup. The caches go: an id can have other XML now.
     func reloadAfterRestore() {
+        clearCaches()
+        reloadFromDisk()
+    }
+
+    private func clearCaches() {
         textCache = [:]
         summaryCache = [:]
         xmlCache = [:]
-        reloadFromDisk()
+    }
+
+    /// Forgets the cached text, summary and XML of the entries that are gone or whose bytes changed (another sha256),
+    /// so that the window never shows other XML than Copy Entry copies.
+    private func dropStaleCaches(old: [HistoryEntry], new: [HistoryEntry]) {
+        let now = Dictionary(new.map { ($0.id, $0.sha256) }, uniquingKeysWith: { a, _ in a })
+        for e in old where now[e.id] != e.sha256 {
+            textCache[e.id] = nil
+            summaryCache[e.id] = nil
+            xmlCache[e.id] = nil
+        }
     }
 
     func refresh() {
         guard let store else { return }
+        dropStaleCaches(old: entries, new: store.entries)
         entries = store.entries
         folders = store.folders
         if let f = selectedFolder, !folders.contains(f) { selectedFolder = nil }
