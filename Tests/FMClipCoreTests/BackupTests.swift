@@ -182,6 +182,21 @@ final class BackupTests: XCTestCase {
         XCTAssertEqual(target.entries.count, 4)
     }
 
+    func testMergeDoesNotTrustCanonicalKeyOfFile() throws {
+        let target = try HistoryStore(folder: history("target"))
+        let mine = try target.add(xml(1), cls: .XMSS)
+        let source = try HistoryStore(folder: history("source"))
+        try source.add(xml(2), cls: .XMSS)
+        // A file that gives other XML the canonical key of an entry in the history.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: try source.makeBackup().encoded()) as? [String: Any])
+        var entries = try XCTUnwrap(json["entries"] as? [[String: Any]])
+        entries[0]["canonical"] = mine.canonical
+        json["entries"] = entries
+        let backup = try Backup.decode(try JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(backup.items[0].entry.canonical, Canonical.key(for: xml(2)))
+        XCTAssertEqual(try target.merge(backup).added, 1)
+    }
+
     func testMergeGivesNewIDWhenIDIsInUse() throws {
         let source = try HistoryStore(folder: history("source"))
         let e = try source.add(xml(1), cls: .XMSS, folder: "A")

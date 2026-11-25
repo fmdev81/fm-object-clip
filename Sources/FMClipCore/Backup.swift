@@ -118,7 +118,8 @@ public struct Backup {
     }
 
     /// Validates and decodes the bytes of a backup file. The format must agree, the version must be 1, each entry
-    /// must decode, and the bytes of each entry must agree with its sha256.
+    /// must decode, and the bytes of each entry must agree with its sha256. The canonical key of each entry comes
+    /// from its bytes, not from the file.
     public static func decode(_ data: Data) throws -> Backup {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             throw BackupError.notBackup("no JSON object")
@@ -144,7 +145,7 @@ public struct Backup {
         for (i, raw) in list.enumerated() {
             var dict = raw
             guard let base64 = dict.removeValue(forKey: "data") as? String else { throw BackupError.badEntry(i, "no data") }
-            let entry: HistoryEntry
+            var entry: HistoryEntry
             do {
                 entry = try JSONDecoder().decode(HistoryEntry.self, from: try JSONSerialization.data(withJSONObject: dict))
             } catch {
@@ -154,6 +155,8 @@ public struct Backup {
             guard ids.insert(entry.id).inserted else { throw BackupError.duplicateID(entry.id) }
             guard let bytes = Data(base64Encoded: base64) else { throw BackupError.badData(entry.id) }
             guard HistoryStore.sha256(bytes) == entry.sha256 else { throw BackupError.checksum(entry.id) }
+            // The duplicate check uses the canonical key: make it from the checked bytes, do not trust the file.
+            entry.canonical = Canonical.key(for: bytes)
             items.append(Item(entry: entry, data: bytes))
         }
         return Backup(created: root["created"] as? String ?? "", folders: folders, settings: settings, items: items)
@@ -234,7 +237,7 @@ extension HistoryStore {
                 for f in backup.folders { _ = folderName(f) }
                 for item in backup.items {
                     var entry = item.entry
-                    let key = entry.canonical ?? Canonical.key(for: item.data)
+                    let key = Canonical.key(for: item.data)
                     if duplicateIndex(cls: entry.cls, sha256: entry.sha256, canonical: key) != nil {
                         result.skippedDuplicates += 1
                         continue
