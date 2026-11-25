@@ -50,6 +50,7 @@ Use folders to keep the entries of one project together. Folders are flat: a fol
 - If the list does not show the selected entry (after a filter, a search, or when you close its folder), the detail pane is empty.
 - To make a folder, select **File** > **New Folder…** (Cmd+Shift+N), or right-click a folder row. A new folder is open.
 - To move an entry to a folder, drag the entry to the folder row. To take an entry out of its folder, drag it to **No Folder**. You can also select **File** > **Move to Folder**, or right-click the entry and select **Move to Folder**. Select **No Folder** to take the entry out of its folder.
+- To change the order of the folders, drag a folder row up or down. A line shows the new position: drop the folder on the upper half of a folder row to put it before that row, or on the lower half to put it after that row. Drop it on **No Folder** to put it last. You can also right-click the folder row and select **Move Folder Up** or **Move Folder Down**. **Edit** > **Undo** puts the folder back. The entries stay in their folders. **No Folder** is always after the folders, and you cannot drag it. The order stays after a restart, and the CLI command `folders` shows the same order.
 - To rename or delete a folder, right-click the folder row. You can also click the folder row and then select **File** > **Rename Folder…** or **Delete Folder**.
 - When you delete a folder, its entries stay in the history, in no folder.
 - The folder does not change the stored XML or the data that **Copy Entry** puts on the clipboard.
@@ -74,7 +75,7 @@ The history is in `~/Library/Application Support/fm-object-clip/history/`. Your 
 | `folder` | Optional. The folder of the entry. |
 | `canonical` | The SHA-256 of the canonical XML, for the duplicate check. An entry from an earlier version can have no value. The app adds it when it needs it. |
 
-- The file `folders.json` has the names of the folders, also the empty folders.
+- The file `folders.json` has the names of the folders, also the empty folders, in the order of the list.
 - The file `.last-restore.json` has the class and the hashes of the last entry that **Copy Entry** or `fm-object-clip-cli restore` put on the clipboard. When the clipboard gets other contents, the app deletes the file.
 - The history keeps 200 entries. When a new entry goes over the limit, the app or the CLI deletes the oldest entry that is in no folder. The app does not delete an entry that is in a folder.
 - If a new capture has the same class and the same content as an entry, the app does not add a new entry. It moves the old entry to the top, and the entry keeps the bytes of the first capture. The same content is the same bytes, or the same canonical XML.
@@ -192,7 +193,7 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `list [--folder NAME \| --no-folder] [--class C] [--search TEXT] [--limit N]` | The entries, newest first. The search looks in the name, the automatic title and the XML. |
 | `show ID` | The data of one entry. |
 | `xml ID` | The stored XML bytes, to stdout. |
-| `folders` | The folders and the number of entries in each. |
+| `folders` | The folders, in the order of the list, and the number of entries in each. |
 | `info` | The FileMaker objects on the clipboard now. |
 | `add FILE.xml --class C [--name NAME] [--folder NAME]` | Adds an entry from a file, with the rules of a capture. If the class and the XML are the same as an entry, it updates the name and the folder of that entry. |
 | `restore ID` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. |
@@ -203,6 +204,7 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `folder new NAME` | Makes a folder. |
 | `folder rename OLD NEW` | Renames a folder. Its entries go with it. |
 | `folder delete NAME` | Deletes a folder. Its entries go to No Folder. |
+| `folder move NAME POSITION` | Moves a folder to a position in the list. Position 1 is the first. A position after the end puts the folder last. Its entries stay in it. It shows the folders in the new order. |
 | `watch` | Adds each FileMaker object on the clipboard to the history, without the app. |
 | `help`, `--help` | Shows the help. |
 
@@ -228,7 +230,7 @@ With `--json`, the read commands give an entry or a list of entries. The write c
 | `file` | The path of the XML file |
 | `canonical` | The SHA-256 of the canonical XML. Two entries with the same class and the same value are the same object. |
 
-A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `info` gives `{"class", "bytes"}` for each object.
+A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `folder move` gives the list of folders in the new order. `info` gives `{"class", "bytes"}` for each object.
 
 ### Exit codes
 
