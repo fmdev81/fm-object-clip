@@ -14,6 +14,9 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 0) {
             list
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if let folder = model.historyOverride { HistoryOverrideNote(folder: folder) }
+                }
                 .background(ListKeyResponder(model: model))
                 .frame(width: Self.listWidth)
                 .frame(maxHeight: .infinity)
@@ -311,9 +314,10 @@ struct EntryRow: View {
 }
 
 /// A group row, like a Finder or Mail sidebar section: triangle, icon, semibold name and number of entries.
-/// It is a folder, or the group "No Folder" (folder == nil) for the entries in no folder.
+/// It is a folder, or the uncategorized group (folder == nil, label from the settings) for the entries in no folder.
 /// A click on the row opens or closes the group. A click on a folder row also selects it for the File menu.
-/// Right-click a folder row to rename or delete it. Drop an entry on a group row to move it to that folder, or to no folder.
+/// Right-click a folder row to rename, delete or move it. Drop an entry on a group row to move it to that folder, or to
+/// no folder. Drag a folder row to change the order of the folders (see FolderDrag.swift).
 struct GroupRow: View {
     @EnvironmentObject var model: AppModel
     let folder: String?
@@ -325,6 +329,8 @@ struct GroupRow: View {
     let first: Bool
     @State private var hover = false
     @State private var targeted = false
+    @State private var dropActive = false
+    @State private var line: VerticalEdge?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -336,7 +342,7 @@ struct GroupRow: View {
             Image(systemName: folder == nil ? "tray" : (expanded ? "folder.fill" : "folder"))
                 .foregroundStyle(folder == nil ? Color.secondary : Color.accentColor.opacity(0.85))
                 .frame(width: 18)
-            Text(folder ?? "No Folder")
+            Text(folder ?? model.uncategorizedName)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(folder == nil ? .secondary : .primary)
                 .lineLimit(1)
@@ -353,10 +359,17 @@ struct GroupRow: View {
         .frame(height: 28)
         .background(RowBackground(selected: (folder != nil ? model.selectedFolder == folder : model.selectedNoFolder) || targeted,
                                   hover: hover, cornerRadius: 7))
+        .overlay(InsertionLine(edge: line))
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .modifier(FolderDragSource(folder: folder))
         .padding(.top, first ? 0 : 10)
         .padding(.bottom, 2)
-        .onHover { hover = $0 }
+        .onHover {
+            hover = $0
+            // A safety net: no drag is over the row when the pointer moves over it again or leaves it.
+            targeted = false
+            line = nil
+        }
         .onTapGesture {
             model.selection = nil
             if let folder { model.selectedFolder = folder } else { model.selectedFolder = nil; model.selectedNoFolder = true }
@@ -371,22 +384,22 @@ struct GroupRow: View {
                 Button("Rename Folder…") { model.startRenameFolder(folder) }
                 Button("Delete Folder") { model.deleteFolder(folder) }
                 Divider()
+                let index = model.folders.firstIndex(of: folder) ?? 0
+                Button("Move Folder Up") { model.moveFolder(folder, to: index - 1) }.disabled(index == 0)
+                Button("Move Folder Down") { model.moveFolder(folder, to: index + 1) }
+                    .disabled(index >= model.folders.count - 1)
+                Divider()
             }
             Button("New Folder…") { model.startNewFolder() }
         }
-        .onDrop(of: [.plainText, .text], isTargeted: $targeted) { providers in
-            guard let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-                guard let id = object as? String else { return }
-                DispatchQueue.main.async { model.move(id, to: folder) }
-            }
-            return true
-        }
+        .onDrop(of: [.fmFolder, .plainText, .text], delegate: GroupDropDelegate(
+            model: model, folder: folder, top: first ? 0 : 10, height: 28, active: $dropActive,
+            targeted: $targeted, line: $line))
         .help(expanded ? "Click to collapse" : "Click to expand")
     }
 }
 
-/// The Move to Folder menu for an entry: No Folder, each folder, and New Folder.
+/// The Move to Folder menu for an entry: the uncategorized group, each folder, and New Folder.
 struct MoveToFolderMenu: View {
     @EnvironmentObject var model: AppModel
     let entry: HistoryEntry
@@ -395,7 +408,7 @@ struct MoveToFolderMenu: View {
     var body: some View {
         let targets = model.contextTargets(for: entry.id)
         Menu("Move to Folder") {
-            Button("No Folder") { model.contextMove(entry.id, to: nil) }
+            Button(model.uncategorizedName) { model.contextMove(entry.id, to: nil) }
                 .disabled(targets.allSatisfy { $0.folder == nil })
             if !model.folders.isEmpty { Divider() }
             ForEach(model.folders, id: \.self) { folder in
@@ -481,5 +494,36 @@ struct ListKeyResponder: NSViewRepresentable {
     func updateNSView(_ view: ListKeyView, context: Context) {
         view.model = model
         model.listKeyView = view
+    }
+}
+
+/// A small note under the list when the app uses another history folder (`-HistoryFolder PATH`), so that a test or
+/// demo history is not mistaken for the real one. It shows in each screenshot of the window.
+struct HistoryOverrideNote: View {
+    let folder: URL
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "externaldrive.badge.questionmark")
+            Text("History: \(Self.shortPath(folder))").lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+        .overlay(Divider().opacity(0.5), alignment: .top)
+        .help("This window uses the history folder \(folder.path) (launch argument -HistoryFolder).")
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The path with the home folder as `~`, for example `~/Desktop/demo/history`.
+    static func shortPath(_ folder: URL, home: String = NSHomeDirectory()) -> String {
+        let path = folder.standardizedFileURL.path
+        let home = (home as NSString).standardizingPath
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
+        return path
     }
 }
