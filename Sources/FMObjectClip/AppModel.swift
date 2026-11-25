@@ -153,36 +153,59 @@ final class AppModel: ObservableObject {
     private static let noFolderCollapsedKey = "noFolderCollapsed"
     @Published var errorMessage: String?
     @Published var showXML = false
+    /// The settings from `settings.json` (see AppSettings.swift). The app reloads them when the file changes.
+    @Published var settings = ClipSettings() { didSet { if settings.appearance != oldValue.appearance { applyAppearance() } } }
+    /// True for the real app. Tests do not change the appearance of the process.
+    private(set) var appliesAppearance = false
 
-    private var store: HistoryStore?
+    private(set) var store: HistoryStore?
     private var watcher: ClipboardWatcher?
     private var textCache: [String: String] = [:]
     private var summaryCache: [String: String?] = [:]
     private var xmlCache: [String: NSAttributedString] = [:]
+    /// The generation of the history that this model loaded (`HistoryStore.generation`). A Replace, also by the CLI,
+    /// writes a new one: then the Undo actions and the caches belong to the old history.
+    private var loadedGeneration: String?
 
     /// - Parameters:
     ///   - store: the history; nil opens the history of the app. Tests give a store in a temporary folder.
     ///   - watch: watch the clipboard and the history folder. Tests use false.
+    /// The history folder of the `-HistoryFolder PATH` launch argument (the `HistoryFolder` user default), or nil.
+    /// Tests and demos use it, so that the app does not open the real history. The window shows it in a footer note.
+    static let historyFolderOverride = HistoryStore.folder(
+        override: UserDefaults.standard.string(forKey: HistoryStore.folderOverrideKey))
+
+    /// The history folder that the app opens: the override, else the default folder.
+    static var appHistoryFolder: URL { historyFolderOverride ?? HistoryStore.defaultFolder }
+
+    /// The override folder when this model uses it (the app), for the footer note and the About panel. Nil in tests.
+    private(set) var historyOverride: URL?
+
     init(store: HistoryStore? = nil, watch: Bool = true) {
         expandedFolders = Set(UserDefaults.standard.stringArray(forKey: Self.expandedKey) ?? [])
         noFolderExpanded = !UserDefaults.standard.bool(forKey: Self.noFolderCollapsedKey)
         do {
-            let store = try store ?? HistoryStore()
+            if store == nil { historyOverride = Self.historyFolderOverride }
+            let store = try store ?? HistoryStore(folder: Self.appHistoryFolder)
             self.store = store
             entries = store.entries
             folders = store.folders
+            settings = store.settings
+            loadedGeneration = store.generation
         } catch {
-            errorMessage = "Cannot open the history in \(HistoryStore.defaultFolder.path): \(error.localizedDescription)"
+            errorMessage = "Cannot open the history in \((store?.folder ?? Self.appHistoryFolder).path): \(error.localizedDescription)"
             return
         }
         guard watch else { return }
+        appliesAppearance = true
+        applyAppearance()
         let watcher = ClipboardWatcher(onOther: { [weak self] in self?.store?.forgetRestore() }) { [weak self] objects in
             self?.capture(objects)
         }
         watcher.start()
         self.watcher = watcher
         // Another process (fm-object-clip-cli, or a second app) can change the history. Then reload it.
-        folderWatcher = HistoryFolderWatcher(folder: HistoryStore.defaultFolder) { [weak self] in self?.reloadFromDisk() }
+        folderWatcher = HistoryFolderWatcher(folder: self.store?.folder ?? Self.appHistoryFolder) { [weak self] in self?.reloadFromDisk() }
     }
 
     private var folderWatcher: HistoryFolderWatcher?
@@ -193,6 +216,16 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         let before = Set(folders)
         do { try store.reload() } catch { return }  // a half-written file can not occur (atomic writes); try at the next change
+        let generation = store.generation
+        if generation != loadedGeneration {
+            // The history was replaced (by this app or by the CLI). An Undo of an earlier change must not act on the
+            // new history, and an id can have other XML now.
+            loadedGeneration = generation
+            undoManager?.removeAllActions()
+            clearCaches()
+        }
+        let newSettings = store.settings
+        if newSettings != settings { settings = newSettings }
         guard store.entries != entries || store.folders != folders else { return }
         refresh()
         expandNewFolders(since: before)
@@ -308,8 +341,32 @@ final class AppModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1, execute: clear)
     }
 
-    private func refresh() {
+    /// Reads the history again after a restore from a backup. The caches go: an id can have other XML now.
+    func reloadAfterRestore() {
+        clearCaches()
+        reloadFromDisk()
+    }
+
+    private func clearCaches() {
+        textCache = [:]
+        summaryCache = [:]
+        xmlCache = [:]
+    }
+
+    /// Forgets the cached text, summary and XML of the entries that are gone or whose bytes changed (another sha256),
+    /// so that the window never shows other XML than Copy Entry copies.
+    private func dropStaleCaches(old: [HistoryEntry], new: [HistoryEntry]) {
+        let now = Dictionary(new.map { ($0.id, $0.sha256) }, uniquingKeysWith: { a, _ in a })
+        for e in old where now[e.id] != e.sha256 {
+            textCache[e.id] = nil
+            summaryCache[e.id] = nil
+            xmlCache[e.id] = nil
+        }
+    }
+
+    func refresh() {
         guard let store else { return }
+        dropStaleCaches(old: entries, new: store.entries)
         entries = store.entries
         folders = store.folders
         if let f = selectedFolder, !folders.contains(f) { selectedFolder = nil }
@@ -418,6 +475,29 @@ final class AppModel: ObservableObject {
         expandedFolders.remove(name)
         if selectedFolder == name { selectedFolder = nil }
         refresh()
+    }
+
+    /// Moves a folder to a new position in the list (0 is the first). Its entries stay in it.
+    /// Edit > Undo (Cmd+Z) puts the folder back at its old position.
+    func moveFolder(_ name: String, to index: Int) {
+        guard let store, let from = store.folders.firstIndex(of: name) else { return }
+        do { try store.moveFolder(name, to: index) } catch { errorMessage = error.localizedDescription }
+        refresh()
+        guard let to = folders.firstIndex(of: name), to != from else { return }
+        undoManager?.registerUndo(withTarget: self) { model in model.moveFolder(name, to: from) }
+        undoManager?.setActionName("Move Folder")
+    }
+
+    /// True when the selected folder can move one place up (offset -1) or down (offset 1): File > Move Folder Up/Down.
+    func canMoveSelectedFolder(by offset: Int) -> Bool {
+        guard let f = selectedFolder, let i = folders.firstIndex(of: f) else { return false }
+        return folders.indices.contains(i + offset)
+    }
+
+    /// Moves the selected folder one place up (offset -1) or down (offset 1), with Undo.
+    func moveSelectedFolder(by offset: Int) {
+        guard canMoveSelectedFolder(by: offset), let f = selectedFolder, let i = folders.firstIndex(of: f) else { return }
+        moveFolder(f, to: i + offset)
     }
 
     /// Moves an entry to a folder, or to no folder (nil).
@@ -578,9 +658,11 @@ final class AppModel: ObservableObject {
     }
 
     func showAbout() {
+        var credits = "A history of the FileMaker Pro objects on the clipboard."
+        if let historyOverride { credits += "\n\nHistory folder (-HistoryFolder): \(historyOverride.path)" }
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "fm-object-clip",
-            .credits: NSAttributedString(string: "A history of the FileMaker Pro objects on the clipboard.",
+            .credits: NSAttributedString(string: credits,
                                          attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]),
         ])
         NSApp.activate(ignoringOtherApps: true)

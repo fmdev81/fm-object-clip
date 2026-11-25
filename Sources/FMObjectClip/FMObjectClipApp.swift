@@ -14,6 +14,10 @@ struct FMObjectClipApp: App {
                 .frame(minWidth: 760, minHeight: 440)
         }
         .commands { ClipCommands(model: model) }
+        Settings {
+            SettingsView()
+                .environmentObject(model)
+        }
     }
 }
 
@@ -65,7 +69,7 @@ struct ClipCommands: Commands {
                 .keyboardShortcut("r")
                 .disabled(model.selected == nil)
             Menu("Move to Folder") {
-                Button("No Folder") { model.moveSelected(to: nil) }
+                Button(model.uncategorizedName) { model.moveSelected(to: nil) }
                     .disabled(model.selectedEntries.allSatisfy { $0.folder == nil })
                 if !model.folders.isEmpty { Divider() }
                 ForEach(model.folders, id: \.self) { folder in
@@ -89,6 +93,14 @@ struct ClipCommands: Commands {
                 .disabled(model.selectedFolder == nil)
             Button("Delete Folder") { if let f = model.selectedFolder { model.deleteFolder(f) } }
                 .disabled(model.selectedFolder == nil)
+            Button("Move Folder Up") { model.moveSelectedFolder(by: -1) }
+                .disabled(!model.canMoveSelectedFolder(by: -1))
+            Button("Move Folder Down") { model.moveSelectedFolder(by: 1) }
+                .disabled(!model.canMoveSelectedFolder(by: 1))
+            Divider()
+            BackupMenuItems(model: model)
+            Divider()
+            SettingsMenuButton()
             Divider()
             Button("Close Window") { NSApp.keyWindow?.performClose(nil) }
                 .keyboardShortcut("w")
