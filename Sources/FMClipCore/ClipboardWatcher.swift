@@ -11,6 +11,11 @@ import AppKit
 /// - when `maxWait` has gone by since the change, with the contents of that check.
 /// After the capture, the watcher does not read that change count again. Data that comes later is ignored.
 /// A new change count before the capture drops the contents that did not settle, and the wait starts again.
+///
+/// `onOther` does not wait: it runs at the first check of a change whose contents have no FileMaker class. Its job is
+/// only to say "the clipboard has other contents now" (the app forgets the restore record), and that is already true
+/// at the first check. So a plain-text copy that a newer change replaces before it settles still calls `onOther`.
+/// `onOther` runs at most one time for each change. A change that has FileMaker objects never calls it.
 public final class ClipboardWatcher {
     /// The maximum time from a change to its capture, in seconds.
     public static let maxWait: TimeInterval = 1.2
@@ -26,6 +31,8 @@ public final class ClipboardWatcher {
     private struct Pending {
         var contents: Contents
         let since: Date
+        /// True when `onOther` ran for this change.
+        var otherCalled: Bool
     }
 
     /// What the watcher compares between two checks.
@@ -78,7 +85,9 @@ public final class ClipboardWatcher {
         let contents = read()
         if count != lastChangeCount {
             lastChangeCount = count
-            pending = Pending(contents: contents, since: now())
+            let other = contents.objects.isEmpty
+            if other { onOther?() }
+            pending = Pending(contents: contents, since: now(), otherCalled: other)
             return []
         }
         guard var p = pending else { return [] }
@@ -88,7 +97,11 @@ public final class ClipboardWatcher {
             return []
         }
         pending = nil
-        if contents.objects.isEmpty { onOther?() } else { onCapture(contents.objects) }
+        if !contents.objects.isEmpty {
+            onCapture(contents.objects)
+        } else if !p.otherCalled {
+            onOther?()
+        }
         return contents.objects
     }
 

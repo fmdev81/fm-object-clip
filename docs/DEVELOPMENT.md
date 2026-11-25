@@ -53,7 +53,7 @@ To test or to make screenshots without your real history, start the app with `-H
 
 ## Clipboard capture
 
-The app checks the clipboard (`NSPasteboard.changeCount`) every 0.4 seconds, because macOS does not send an event when the clipboard changes. After a change, the app waits until two checks in a row read the same contents, or until 1.2 seconds have gone by. Then it captures the contents one time. So a copy is in the history 0.4 to 0.8 seconds after Cmd+C, when its contents do not change. If the clipboard changes again before the capture, the app drops the first contents and waits for the new ones. Any program that puts one of the classes below on the clipboard is captured the same way as FileMaker Pro.
+The app checks the clipboard (`NSPasteboard.changeCount`) every 0.4 seconds, because macOS does not send an event when the clipboard changes. After a change, the app waits until two checks in a row read the same contents, or until 1.2 seconds have gone by. Then it captures the contents one time. So a copy is in the history 0.4 to 0.8 seconds after Cmd+C, when its contents do not change. If the clipboard changes again before the capture, the app drops the first contents and waits for the new ones. Contents with no FileMaker class (for example plain text) do not wait: at the first check, the app forgets the entry that **Copy Entry** or `restore` put on the clipboard. So the next FileMaker copy of that entry moves it to the top. Any program that puts one of the classes below on the clipboard is captured the same way as FileMaker Pro.
 
 | Class | Objects | Label in the app |
 |---|---|---|
