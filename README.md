@@ -50,6 +50,7 @@ Use folders to keep the entries of one project together. Folders are flat: a fol
 - If the list does not show the selected entry (after a filter, a search, or when you close its folder), the detail pane is empty.
 - To make a folder, select **File** > **New Folder…** (Cmd+Shift+N), or right-click a folder row. A new folder is open.
 - To move an entry to a folder, drag the entry to the folder row. To take an entry out of its folder, drag it to the uncategorized group. You can also select **File** > **Move to Folder**, or right-click the entry and select **Move to Folder**. Select the name of the uncategorized group (**Uncategorized**) to take the entry out of its folder.
+- To change the order of the folders, drag a folder row up or down. A line shows the new position: drop the folder on the upper half of a folder row to put it before that row, or on the lower half to put it after that row. Drop it on the uncategorized group to put it last. You can also right-click the folder row and select **Move Folder Up** or **Move Folder Down**. **Edit** > **Undo** puts the folder back. The entries stay in their folders. The uncategorized group is always after the folders, and you cannot drag it. The order stays after a restart, and the CLI command `folders` shows the same order.
 - To rename or delete a folder, right-click the folder row. You can also click the folder row and then select **File** > **Rename Folder…** or **Delete Folder**.
 - When you delete a folder, its entries stay in the history, in the uncategorized group.
 - The folder does not change the stored XML or the data that **Copy Entry** puts on the clipboard.
@@ -74,7 +75,7 @@ The history is in `~/Library/Application Support/fm-object-clip/history/`. Your 
 | `folder` | Optional. The folder of the entry. |
 | `canonical` | The SHA-256 of the canonical XML, for the duplicate check. An entry from an earlier version can have no value. The app adds it when it needs it. |
 
-- The file `folders.json` has the names of the folders, also the empty folders.
+- The file `folders.json` has the names of the folders, also the empty folders, in the order of the list.
 - The file `settings.json` has the settings (see [Settings](#settings)).
 - The file `.last-restore.json` has the class and the hashes of the last entry that **Copy Entry** or `fm-object-clip-cli restore` put on the clipboard. When the clipboard gets other contents, the app deletes the file.
 - The history keeps 500 uncategorized entries (entries in no folder). You can change the limit in **Settings**. When there are more uncategorized entries, the app or the CLI deletes the oldest uncategorized entries. Entries in folders do not count, and the app never deletes them.
@@ -241,7 +242,7 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `list [--folder NAME \| --no-folder] [--class C] [--search TEXT] [--limit N]` | The entries, newest first. The search looks in the name, the automatic title and the XML. |
 | `show ID` | The data of one entry. |
 | `xml ID` | The stored XML bytes, to stdout. |
-| `folders` | The folders and the number of entries in each. |
+| `folders` | The folders, in the order of the list, and the number of entries in each. |
 | `info` | The FileMaker objects on the clipboard now. |
 | `add FILE.xml --class C [--name NAME] [--folder NAME]` | Adds an entry from a file, with the rules of a capture. If the class and the XML are the same as an entry, it updates the name and the folder of that entry. |
 | `restore ID` | Puts the entry on the clipboard with its class. The entry keeps its time and its place. |
@@ -252,6 +253,7 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `folder new NAME` | Makes a folder. |
 | `folder rename OLD NEW` | Renames a folder. Its entries go with it. |
 | `folder delete NAME` | Deletes a folder. Its entries go to the uncategorized group. |
+| `folder move NAME POSITION` | Moves a folder to a position in the list. Position 1 is the first. A position after the end puts the folder last. Its entries stay in it. It shows the folders in the new order. |
 | `settings` | Shows the settings. |
 | `settings set KEY VALUE` | Sets one setting. `KEY` is `appearance` (`system`, `light` or `dark`), `uncategorized-name` (text), or `uncategorized-limit` (10 to 100000). A lower limit deletes the oldest uncategorized entries at once, with no question. The tool shows how many entries it deleted. A bad key or value gives exit code 2. |
 | `backup FILE [--force]` | Writes the full history to one backup file (see [Backup](#backup)). The tool does not overwrite a file that exists, except with `--force`. |
@@ -282,7 +284,7 @@ With `--json`, the read commands give an entry or a list of entries. The write c
 | `file` | The path of the XML file |
 | `canonical` | The SHA-256 of the canonical XML. Two entries with the same class and the same value are the same object. |
 
-A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `settings` gives `{"appearance", "uncategorizedName", "uncategorizedLimit"}`. `settings set` also gives `deletedEntries`. `info` gives `{"class", "bytes"}` for each object. `backup` gives `{"file", "entries", "folders", "settings"}`. `import-backup` gives `{"mode": "merge", "added", "skippedDuplicates", "foldersAdded"}`, or `{"mode": "replace", "entries", "folders", "safetyBackup"}`.
+A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `settings` gives `{"appearance", "uncategorizedName", "uncategorizedLimit"}`. `settings set` also gives `deletedEntries`. `folder move` gives the list of folders in the new order. `info` gives `{"class", "bytes"}` for each object. `backup` gives `{"file", "entries", "folders", "settings"}`. `import-backup` gives `{"mode": "merge", "added", "skippedDuplicates", "foldersAdded"}`, or `{"mode": "replace", "entries", "folders", "safetyBackup"}`.
 
 ### Exit codes
 

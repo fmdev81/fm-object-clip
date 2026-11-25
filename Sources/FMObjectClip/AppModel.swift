@@ -432,6 +432,17 @@ final class AppModel: ObservableObject {
         refresh()
     }
 
+    /// Moves a folder to a new position in the list (0 is the first). Its entries stay in it.
+    /// Edit > Undo (Cmd+Z) puts the folder back at its old position.
+    func moveFolder(_ name: String, to index: Int) {
+        guard let store, let from = store.folders.firstIndex(of: name) else { return }
+        do { try store.moveFolder(name, to: index) } catch { errorMessage = error.localizedDescription }
+        refresh()
+        guard let to = folders.firstIndex(of: name), to != from else { return }
+        undoManager?.registerUndo(withTarget: self) { model in model.moveFolder(name, to: from) }
+        undoManager?.setActionName("Move Folder")
+    }
+
     /// Moves an entry to a folder, or to no folder (nil).
     func move(_ id: HistoryEntry.ID, to folder: String?) {
         guard let store else { return }

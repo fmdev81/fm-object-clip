@@ -313,7 +313,8 @@ struct EntryRow: View {
 /// A group row, like a Finder or Mail sidebar section: triangle, icon, semibold name and number of entries.
 /// It is a folder, or the uncategorized group (folder == nil, label from the settings) for the entries in no folder.
 /// A click on the row opens or closes the group. A click on a folder row also selects it for the File menu.
-/// Right-click a folder row to rename or delete it. Drop an entry on a group row to move it to that folder, or to no folder.
+/// Right-click a folder row to rename, delete or move it. Drop an entry on a group row to move it to that folder, or to
+/// no folder. Drag a folder row to change the order of the folders (see FolderDrag.swift).
 struct GroupRow: View {
     @EnvironmentObject var model: AppModel
     let folder: String?
@@ -325,6 +326,7 @@ struct GroupRow: View {
     let first: Bool
     @State private var hover = false
     @State private var targeted = false
+    @State private var line: VerticalEdge?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -353,7 +355,9 @@ struct GroupRow: View {
         .frame(height: 28)
         .background(RowBackground(selected: (folder != nil ? model.selectedFolder == folder : model.selectedNoFolder) || targeted,
                                   hover: hover, cornerRadius: 7))
+        .overlay(InsertionLine(edge: line))
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .modifier(FolderDragSource(folder: folder))
         .padding(.top, first ? 0 : 10)
         .padding(.bottom, 2)
         .onHover { hover = $0 }
@@ -371,17 +375,16 @@ struct GroupRow: View {
                 Button("Rename Folder…") { model.startRenameFolder(folder) }
                 Button("Delete Folder") { model.deleteFolder(folder) }
                 Divider()
+                let index = model.folders.firstIndex(of: folder) ?? 0
+                Button("Move Folder Up") { model.moveFolder(folder, to: index - 1) }.disabled(index == 0)
+                Button("Move Folder Down") { model.moveFolder(folder, to: index + 1) }
+                    .disabled(index >= model.folders.count - 1)
+                Divider()
             }
             Button("New Folder…") { model.startNewFolder() }
         }
-        .onDrop(of: [.plainText, .text], isTargeted: $targeted) { providers in
-            guard let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-                guard let id = object as? String else { return }
-                DispatchQueue.main.async { model.move(id, to: folder) }
-            }
-            return true
-        }
+        .onDrop(of: [.fmFolder, .plainText, .text], delegate: GroupDropDelegate(
+            model: model, folder: folder, top: first ? 0 : 10, height: 28, targeted: $targeted, line: $line))
         .help(expanded ? "Click to collapse" : "Click to expand")
     }
 }
