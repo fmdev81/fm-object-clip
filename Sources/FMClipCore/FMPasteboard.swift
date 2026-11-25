@@ -35,16 +35,36 @@ public enum FMPasteboard {
         }
     }
 
-    /// The name on the pasteboard (class `FOPN`), or nil if there is no name or it is empty.
+    /// The name on the pasteboard (class `FOPN`), or nil if there is no name (see `cleanLabel`).
     public static func readName(_ pasteboard: NSPasteboard = .general) -> String? {
-        guard let data = pasteboard.data(forType: nameType) else { return nil }
-        return HistoryStore.cleanName(String(decoding: data, as: UTF8.self))
+        pasteboard.data(forType: nameType).flatMap(cleanLabel)
     }
 
-    /// The folder on the pasteboard (class `FOPF`), or nil if there is no folder or it is empty.
+    /// The folder on the pasteboard (class `FOPF`), or nil if there is no folder (see `cleanLabel`).
     public static func readFolder(_ pasteboard: NSPasteboard = .general) -> String? {
-        guard let data = pasteboard.data(forType: folderType) else { return nil }
-        return HistoryStore.cleanName(String(decoding: data, as: UTF8.self))
+        pasteboard.data(forType: folderType).flatMap(cleanLabel)
+    }
+
+    /// The maximum length of a name or a folder from the clipboard, in characters.
+    public static let maxLabelLength = 200
+
+    /// The text of a `FOPN` or `FOPF` value, made safe to keep:
+    /// - Data that is not valid UTF-8 gives nil.
+    /// - Line breaks and tabs become spaces. The other control characters (C0, DEL and C1, for example NUL) go away.
+    /// - The spaces at the two ends go away, and the text is cut to `maxLabelLength` characters.
+    /// - An empty result gives nil, the same as no value.
+    public static func cleanLabel(_ data: Data) -> String? {
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        var scalars = String.UnicodeScalarView()
+        for u in text.unicodeScalars {
+            if CharacterSet.newlines.contains(u) || u == "\t" {
+                scalars.append(" ")
+            } else if u.properties.generalCategory != .control {  // Cc: C0, DEL and C1
+                scalars.append(u)
+            }
+        }
+        guard let clean = HistoryStore.cleanName(String(scalars)) else { return nil }
+        return HistoryStore.cleanName(String(clean.prefix(maxLabelLength)))
     }
 
     /// Puts the data on the pasteboard with the class. Returns the new change count, or nil if the pasteboard refused the data.

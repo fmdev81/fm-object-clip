@@ -19,8 +19,12 @@ final class NameFolderFlavorTests: XCTestCase {
     }
 
     /// One clipboard write, as a tool makes it: the FileMaker class, and the name and the folder if given.
+    /// All the types are declared at once (see docs/DEVELOPMENT.md).
     func put(_ data: Data, _ cls: FMClass, name: String? = nil, folder: String? = nil) {
-        pasteboard.clearContents()
+        var types = [cls.pasteboardType]
+        if name != nil { types.append(FMPasteboard.nameType) }
+        if folder != nil { types.append(FMPasteboard.folderType) }
+        pasteboard.declareTypes(types, owner: nil)
         pasteboard.setData(data, forType: cls.pasteboardType)
         if let name { pasteboard.setData(Data(name.utf8), forType: FMPasteboard.nameType) }
         if let folder { pasteboard.setData(Data(folder.utf8), forType: FMPasteboard.folderType) }
