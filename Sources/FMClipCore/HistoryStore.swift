@@ -67,16 +67,16 @@ public final class HistoryStore {
 
     public let folder: URL
     public let limit: Int
-    public private(set) var entries: [HistoryEntry] = []
+    public internal(set) var entries: [HistoryEntry] = []
     /// The folders, in the order of the user (new folders at the end). Folders are flat.
-    public private(set) var folders: [String] = []
+    public internal(set) var folders: [String] = []
     /// The messages of the repair at open, for example an `.xml` file with no index entry.
     public private(set) var repairLog: [String] = []
 
     private var indexURL: URL { folder.appendingPathComponent("index.json") }
     private var foldersURL: URL { folder.appendingPathComponent("folders.json") }
     private var lockURL: URL { folder.appendingPathComponent(".lock") }
-    private var restoreURL: URL { folder.appendingPathComponent(".last-restore.json") }
+    var restoreURL: URL { folder.appendingPathComponent(".last-restore.json") }
 
     public init(folder: URL = HistoryStore.defaultFolder, limit: Int = HistoryStore.maxEntries) throws {
         self.folder = folder
@@ -99,7 +99,7 @@ public final class HistoryStore {
 
     /// Runs body with the exclusive lock of the history, after a reload of the files on disk.
     /// Do not call a method that locks from inside body: a second lock in the same process waits for ever.
-    private func withLock<T>(_ body: () throws -> T) throws -> T {
+    func withLock<T>(_ body: () throws -> T) throws -> T {
         let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o644)
         guard fd >= 0 else { throw StoreError.lock(lockURL.path) }
         defer { close(fd) }
@@ -211,7 +211,7 @@ public final class HistoryStore {
 
     /// The index of the entry with the same class and the same bytes or the same canonical XML. For an entry with no
     /// canonical key (from an earlier version), the store makes the key from its file. Call it under the lock.
-    private func duplicateIndex(cls: FMClass, sha256: String, canonical key: String?) -> Int? {
+    func duplicateIndex(cls: FMClass, sha256: String, canonical key: String?) -> Int? {
         if let i = entries.firstIndex(where: { $0.cls == cls && $0.sha256 == sha256 }) { return i }
         guard let key else { return nil }
         for i in entries.indices where entries[i].cls == cls {
