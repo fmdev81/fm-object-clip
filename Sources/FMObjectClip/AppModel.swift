@@ -312,6 +312,14 @@ final class AppModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1, execute: clear)
     }
 
+    /// Reads the history again after a restore from a backup. The caches go: an id can have other XML now.
+    func reloadAfterRestore() {
+        textCache = [:]
+        summaryCache = [:]
+        xmlCache = [:]
+        reloadFromDisk()
+    }
+
     func refresh() {
         guard let store else { return }
         entries = store.entries

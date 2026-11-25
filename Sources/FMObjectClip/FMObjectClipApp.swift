@@ -94,6 +94,8 @@ struct ClipCommands: Commands {
             Button("Delete Folder") { if let f = model.selectedFolder { model.deleteFolder(f) } }
                 .disabled(model.selectedFolder == nil)
             Divider()
+            BackupMenuItems(model: model)
+            Divider()
             SettingsMenuButton()
             Divider()
             Button("Close Window") { NSApp.keyWindow?.performClose(nil) }

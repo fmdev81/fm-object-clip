@@ -68,16 +68,16 @@ public final class HistoryStore {
     /// The maximum number of uncategorized entries (entries in no folder). When a change goes over the limit, the
     /// store deletes the oldest uncategorized entries. Entries in folders do not count, and the store never deletes them.
     public var limit: Int { fixedLimit ?? settings.uncategorizedLimit }
-    public private(set) var entries: [HistoryEntry] = []
+    public internal(set) var entries: [HistoryEntry] = []
     /// The folders, in the order of the user (new folders at the end). Folders are flat.
-    public private(set) var folders: [String] = []
+    public internal(set) var folders: [String] = []
     /// The messages of the repair at open, for example an `.xml` file with no index entry.
     public private(set) var repairLog: [String] = []
 
     private var indexURL: URL { folder.appendingPathComponent("index.json") }
     private var foldersURL: URL { folder.appendingPathComponent("folders.json") }
     private var lockURL: URL { folder.appendingPathComponent(".lock") }
-    private var restoreURL: URL { folder.appendingPathComponent(".last-restore.json") }
+    var restoreURL: URL { folder.appendingPathComponent(".last-restore.json") }
 
     /// - Parameters:
     ///   - limit: a fixed limit for the uncategorized entries. Nil (the default) uses the limit in `settings.json`.
@@ -214,7 +214,7 @@ public final class HistoryStore {
 
     /// The index of the entry with the same class and the same bytes or the same canonical XML. For an entry with no
     /// canonical key (from an earlier version), the store makes the key from its file. Call it under the lock.
-    private func duplicateIndex(cls: FMClass, sha256: String, canonical key: String?) -> Int? {
+    func duplicateIndex(cls: FMClass, sha256: String, canonical key: String?) -> Int? {
         if let i = entries.firstIndex(where: { $0.cls == cls && $0.sha256 == sha256 }) { return i }
         guard let key else { return nil }
         for i in entries.indices where entries[i].cls == cls {

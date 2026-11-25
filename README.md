@@ -90,6 +90,30 @@ The history is in `~/Library/Application Support/fm-object-clip/history/`. Your 
 
 The files are plain XML and JSON. Scripts and agents can read them without the app.
 
+## Backup
+
+A backup is one file with the full history: all the entries with their XML, all the folders in their order, and the settings (`settings.json`).
+
+- **File** > **Back Up History…** writes a backup to a file that you select. The default name is `fm-object-clip-backup-YYYY-MM-DD.json`.
+- **File** > **Restore from Backup…** reads a backup file. Then select one of these:
+  - **Merge** (the default): the app adds the entries that are not in the history. It uses the same duplicate rule as a capture: the same class and the same content. A new entry keeps its id, time, name, folder and XML bytes. If its id is in use, it gets a new id. The app adds the missing folders after the current folders. The settings do not change.
+  - **Replace**: the app replaces the full history and the settings with the backup. First, it saves the current history to `~/Library/Application Support/fm-object-clip/backups/fm-object-clip-before-restore-<time>.json`. To go back, restore that file with **Replace**.
+- The app refuses a file that is not a backup, a file with an unknown version, and a damaged file. It shows an error and changes nothing.
+- A restore does not delete an entry that is in a folder. If the history has more than 200 entries after a restore, the size limit deletes the oldest entries in no folder at the next capture.
+
+The backup file is UTF-8 JSON, pretty-printed, with sorted keys:
+
+| Field | Value |
+|---|---|
+| `format` | `fm-object-clip-backup` |
+| `version` | `1`. The app refuses a higher version. |
+| `created` | The time of the backup, ISO 8601 |
+| `folders` | The folder names, in their order |
+| `settings` | The object of `settings.json`, or `null` |
+| `entries` | The entries, newest first. Each entry has the fields of `index.json`, and `data`: the XML bytes in base64. The bytes must agree with `sha256`. |
+
+The command-line tool has the same operations: `backup FILE` and `import-backup FILE [--replace]`.
+
 ## Main window
 
 - A list of the entries. The list has a fixed width. The selected entry has a light tint. The order of the entries in each group is:
@@ -154,7 +178,7 @@ The app and `fm-object-clip-cli` use the same file. A change from the CLI shows 
 | Menu | Items |
 |---|---|
 | fm-object-clip | About fm-object-clip, Settings… (Cmd+,), Quit (Cmd+Q) |
-| File | Entries: Copy Entry (Cmd+C), Rename… (Cmd+R), Move to Folder, Save As… (Cmd+Shift+S), Delete (Cmd+Delete). Folders: New Folder… (Cmd+Shift+N), Rename Folder…, Delete Folder. Then Settings… and Close Window (Cmd+W). |
+| File | Entries: Copy Entry (Cmd+C), Rename… (Cmd+R), Move to Folder, Save As… (Cmd+Shift+S), Delete (Cmd+Delete). Folders: New Folder… (Cmd+Shift+N), Rename Folder…, Delete Folder. Then Back Up History…, Restore from Backup…, Settings… and Close Window (Cmd+W). |
 | Edit | The standard items. When the list has the keyboard focus, **Select All** (Cmd+A) and **Delete** act on the entries. |
 | View | All Types (Cmd+1), Scripts (Cmd+2), Tables (Cmd+3), Fields (Cmd+4), Layout (Cmd+5), Show XML (Cmd+Option+X) |
 | Window | History Window (Cmd+0) and the standard items |
@@ -230,6 +254,9 @@ Each command takes `--history DIR` (the default is the history of the app) and `
 | `folder delete NAME` | Deletes a folder. Its entries go to the uncategorized group. |
 | `settings` | Shows the settings. |
 | `settings set KEY VALUE` | Sets one setting. `KEY` is `appearance` (`system`, `light` or `dark`), `uncategorized-name` (text), or `uncategorized-limit` (10 to 100000). A lower limit deletes the oldest uncategorized entries at once, with no question. The tool shows how many entries it deleted. A bad key or value gives exit code 2. |
+| `backup FILE [--force]` | Writes the full history to one backup file (see [Backup](#backup)). The tool does not overwrite a file that exists, except with `--force`. |
+| `import-backup FILE` | Merge: adds the entries of the backup that are not in the history, and the missing folders. The settings do not change. |
+| `import-backup FILE --replace` | Replace: replaces the full history and the settings with the backup. First, the tool saves the current history to the `backups` folder next to the history folder. |
 | `watch` | Adds each FileMaker object on the clipboard to the history, without the app. |
 | `help`, `--help` | Shows the help. |
 
@@ -255,14 +282,14 @@ With `--json`, the read commands give an entry or a list of entries. The write c
 | `file` | The path of the XML file |
 | `canonical` | The SHA-256 of the canonical XML. Two entries with the same class and the same value are the same object. |
 
-A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `settings` gives `{"appearance", "uncategorizedName", "uncategorizedLimit"}`. `settings set` also gives `deletedEntries`. `info` gives `{"class", "bytes"}` for each object.
+A folder is `{"name", "count"}`. `folder rename` also gives `oldName`. `folder delete` gives `{"name", "movedEntries"}`. `settings` gives `{"appearance", "uncategorizedName", "uncategorizedLimit"}`. `settings set` also gives `deletedEntries`. `info` gives `{"class", "bytes"}` for each object. `backup` gives `{"file", "entries", "folders", "settings"}`. `import-backup` gives `{"mode": "merge", "added", "skippedDuplicates", "foldersAdded"}`, or `{"mode": "replace", "entries", "folders", "safetyBackup"}`.
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | OK |
-| 1 | Error, for example a folder name that exists |
+| 1 | Error, for example a folder name that exists, or a file that is not a correct backup |
 | 2 | Bad usage, for example an unknown command or class |
 | 3 | Not found: an entry, a folder or a file |
 
@@ -279,6 +306,8 @@ $CLI move 20261120-180123-0f558176 "Project A"
 $CLI folder new "Project B"
 $CLI add contacts-fields.xml --class XMFD --name "Contact fields" --folder "Project A"
 $CLI settings set uncategorized-limit 1000
+$CLI backup ~/Desktop/fm-object-clip-backup.json
+$CLI import-backup ~/Desktop/fm-object-clip-backup.json --json
 ```
 
 ## Limits

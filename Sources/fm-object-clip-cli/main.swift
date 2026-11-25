@@ -38,13 +38,22 @@ Settings (settings.json in the history folder, shared with the app):
                                 uncategorized-limit  \(ClipSettings.limitRange.lowerBound) to \(ClipSettings.limitRange.upperBound); a lower limit deletes the
                                                      oldest uncategorized entries at once
 
+Backup:
+  backup FILE [--force]       write the full history (entries, folders, settings) to one backup file;
+                              --force overwrites an existing file
+  import-backup FILE          add the entries of the backup that are not in the history (Merge)
+  import-backup FILE --replace
+                              replace the full history and the settings with the backup; the current
+                              history is saved to the backups folder first
+
 Other:
   watch                       add each FileMaker object on the clipboard to the history (Ctrl+C to stop)
   help, --help                this text
 
 Options:
   --history DIR   the history folder (default: \(HistoryStore.defaultFolder.path))
-  --json          JSON output (an entry, a list of entries, a folder, or a list of folders)
+  --json          JSON output (an entry, a list of entries, a folder, a list of folders, or
+                  the counts of a backup command)
   C               one of \(FMClass.allCases.map(\.rawValue).joined(separator: ", "))
 
 Exit codes: 0 OK, 1 error, 2 bad usage, 3 not found. Errors go to stderr.
@@ -72,7 +81,7 @@ struct Arguments {
     var flags: Set<String> = []
 
     static let valueOptions: Set<String> = ["--history", "--folder", "--class", "--search", "--limit", "--name"]
-    static let flagOptions: Set<String> = ["--json", "--no-folder", "--help", "-h"]
+    static let flagOptions: Set<String> = ["--json", "--no-folder", "--help", "-h", "--force", "--replace"]
 
     init(_ raw: [String]) throws {
         var i = 0
@@ -330,6 +339,43 @@ func run(_ args: Arguments) throws {
 
     case "settings":
         try runSettings(args)
+
+    case "backup":
+        try need(args, 2, "backup FILE [--force]")
+        let url = URL(fileURLWithPath: p[1])
+        if FileManager.default.fileExists(atPath: url.path) && !args.flags.contains("--force") {
+            throw fail(.error, "the file \(url.path) exists; use --force to overwrite it")
+        }
+        let store = try openStore(args)
+        let backup = try store.writeBackup(to: url)
+        if args.json {
+            printJSON(["file": url.path, "entries": backup.items.count, "folders": backup.folders.count,
+                       "settings": backup.settings != nil])
+        } else {
+            print("backup written\t\(url.path)\t\(backup.items.count) entries\t\(backup.folders.count) folders")
+        }
+
+    case "import-backup":
+        try need(args, 2, "import-backup FILE [--replace]")
+        guard FileManager.default.fileExists(atPath: p[1]) else { throw fail(.notFound, "cannot read the file \(p[1])") }
+        let backup = try Backup.read(from: URL(fileURLWithPath: p[1]))
+        let store = try openStore(args)
+        if args.flags.contains("--replace") {
+            let r = try store.replace(with: backup)
+            if args.json {
+                printJSON(["mode": "replace", "entries": r.entries, "folders": r.folders, "safetyBackup": r.safetyBackup.path])
+            } else {
+                print("history replaced\t\(r.entries) entries\t\(r.folders) folders\tsafety backup \(r.safetyBackup.path)")
+            }
+        } else {
+            let r = try store.merge(backup)
+            if args.json {
+                printJSON(["mode": "merge", "added": r.added, "skippedDuplicates": r.skippedDuplicates,
+                           "foldersAdded": r.foldersAdded])
+            } else {
+                print("merged\t\(r.added) added\t\(r.skippedDuplicates) duplicates skipped\t\(r.foldersAdded) folders added")
+            }
+        }
 
     case "watch":
         try need(args, 1, "watch")
