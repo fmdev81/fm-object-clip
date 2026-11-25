@@ -95,16 +95,16 @@ final class FolderTests: XCTestCase {
         let store = try HistoryStore(folder: folder, limit: 5)
         let kept = try store.add(xml(0), cls: .XMSS, folder: "Keep")
         for i in 1...10 { try store.add(xml(i), cls: .XMSS) }
-        XCTAssertEqual(store.entries.count, 5)
         XCTAssertNotNil(store.entry(id: kept.id))  // the oldest entry stays, because it is in a folder
-        XCTAssertEqual(store.entries.filter { $0.folder == nil }.count, 4)
+        XCTAssertEqual(store.entries.filter { $0.folder == nil }.count, 5)  // the limit counts only these
+        XCTAssertEqual(store.entries.count, 6)
 
-        // When all the entries over the limit are in folders, the store deletes nothing.
+        // Entries in folders do not count: the folder can hold more entries than the limit.
         for i in 11...16 { try store.add(xml(i), cls: .XMSS, folder: "Keep") }
         XCTAssertEqual(store.entries.filter { $0.folder == "Keep" }.count, 7)
-        XCTAssertEqual(store.entries.filter { $0.folder == nil }.count, 0)
+        XCTAssertEqual(store.entries.filter { $0.folder == nil }.count, 5)
 
-        // A deleted folder gives its entries back to the limit.
+        // A deleted folder gives its entries back to the uncategorized group, and the limit applies.
         try store.deleteFolder("Keep")
         XCTAssertEqual(store.entries.count, 5)
     }
