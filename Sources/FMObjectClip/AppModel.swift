@@ -154,7 +154,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var showXML = false
 
-    private var store: HistoryStore?
+    private(set) var store: HistoryStore?
     private var watcher: ClipboardWatcher?
     private var textCache: [String: String] = [:]
     private var summaryCache: [String: String?] = [:]
@@ -301,6 +301,14 @@ final class AppModel: ObservableObject {
         }
         copiedClear = clear
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1, execute: clear)
+    }
+
+    /// Reads the history again after a restore from a backup. The caches go: an id can have other XML now.
+    func reloadAfterRestore() {
+        textCache = [:]
+        summaryCache = [:]
+        xmlCache = [:]
+        reloadFromDisk()
     }
 
     private func refresh() {
