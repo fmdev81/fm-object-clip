@@ -186,9 +186,6 @@ extension HistoryStore {
         public var safetyBackup: URL
     }
 
-    /// The file of the settings. Backup treats it as an opaque JSON object.
-    var backupSettingsURL: URL { folder.appendingPathComponent("settings.json") }
-
     /// The folder of the safety backups: `backups` next to the history folder.
     public var backupsFolder: URL {
         folder.deletingLastPathComponent().appendingPathComponent("backups", isDirectory: true)
@@ -210,7 +207,8 @@ extension HistoryStore {
     private func makeBackupUnlocked(now: Date) throws -> Backup {
         let items = try entries.map { Backup.Item(entry: $0, data: try data(for: $0)) }
         var settings: [String: Any]?
-        if let data = try? Data(contentsOf: backupSettingsURL) {
+        // The settings file of issue #3 (SettingsStore). Backup treats it as an opaque JSON object.
+        if let data = try? Data(contentsOf: SettingsStore.url(in: folder)) {
             settings = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         }
         return Backup(created: Self.isoTime(now), folders: folders, settings: settings, items: items)
@@ -297,13 +295,14 @@ extension HistoryStore {
                     remember(url)
                     try item.data.write(to: url, options: .atomic)
                 }
-                remember(backupSettingsURL)
+                let settingsURL = SettingsStore.url(in: folder)
+                remember(settingsURL)
                 if let settings = backup.settings {
                     let data = try JSONSerialization.data(withJSONObject: settings,
                                                           options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-                    try data.write(to: backupSettingsURL, options: .atomic)
-                } else if fm.fileExists(atPath: backupSettingsURL.path) {
-                    try fm.removeItem(at: backupSettingsURL)
+                    try data.write(to: settingsURL, options: .atomic)
+                } else if fm.fileExists(atPath: settingsURL.path) {
+                    try fm.removeItem(at: settingsURL)
                 }
                 folders = newFolders
                 try saveFolders()
