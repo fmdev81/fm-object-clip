@@ -400,6 +400,20 @@ public final class HistoryStore {
         }
     }
 
+    /// Moves a folder to a new position in the folder list (0 is the first) and returns the new list. An index out of
+    /// range goes to the nearest end. The entries do not change: they stay in their folders.
+    @discardableResult
+    public func moveFolder(_ name: String, to index: Int) throws -> [String] {
+        try withLock {
+            guard let order = FolderOrder.moved(folders, name, to: index) else { throw FolderError.notFound(name) }
+            if order != folders {
+                folders = order
+                try saveFolders()
+            }
+            return folders
+        }
+    }
+
     /// The number of entries in the folder.
     public func count(in folder: String) -> Int {
         entries.filter { $0.folder == folder }.count

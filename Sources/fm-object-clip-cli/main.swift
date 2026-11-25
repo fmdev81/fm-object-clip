@@ -29,6 +29,7 @@ Write commands:
   folder new NAME             make a folder
   folder rename OLD NEW       rename a folder; its entries go with it
   folder delete NAME          delete a folder; its entries go to No Folder
+  folder move NAME POSITION   move a folder to a position in the list (1 is the first); its entries stay in it
 
 Other:
   watch                       add each FileMaker object on the clipboard to the history (Ctrl+C to stop)
@@ -284,7 +285,7 @@ func run(_ args: Arguments) throws {
         if args.json { printJSON(before) } else { gone.forEach { print("deleted\t\(line($0))") } }
 
     case "folder":
-        guard p.count >= 2 else { throw fail(.usage, "usage: fm-object-clip-cli folder new NAME | rename OLD NEW | delete NAME") }
+        guard p.count >= 2 else { throw fail(.usage, "usage: fm-object-clip-cli folder new NAME | rename OLD NEW | delete NAME | move NAME POSITION") }
         let store = try openStore(args)
         do {
             switch p[1] {
@@ -309,8 +310,15 @@ func run(_ args: Arguments) throws {
                 if args.json { printJSON(["name": existing, "movedEntries": moved]) } else {
                     print("deleted folder\t\(existing)\t\(moved) entries to No Folder")
                 }
+            case "move":
+                try need(args, 4, "folder move NAME POSITION")
+                guard let position = Int(p[3]), position >= 1 else { throw fail(.usage, "POSITION needs a number of 1 or more") }
+                let order = try store.moveFolder(p[2], to: position - 1)
+                if args.json { printJSON(order.map { folderJSON($0, store) }) } else {
+                    order.forEach { print("\($0)\t\(store.count(in: $0))") }
+                }
             default:
-                throw fail(.usage, "unknown folder command \(p[1]); use new, rename or delete")
+                throw fail(.usage, "unknown folder command \(p[1]); use new, rename, delete or move")
             }
         } catch let error as HistoryStore.FolderError {
             switch error {
