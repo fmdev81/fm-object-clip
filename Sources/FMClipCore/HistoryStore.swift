@@ -57,6 +57,24 @@ public struct RestoreRecord: Codable, Equatable, Sendable {
 /// Each change takes an exclusive lock on the file `.lock` in the history folder, reads the latest
 /// `index.json` and `folders.json`, makes the change, and writes the files atomically. Thus no change is lost.
 public final class HistoryStore {
+    /// The user default (and launch argument, `-HistoryFolder PATH`) that makes the app use another history folder,
+    /// for tests and demos.
+    public static let folderOverrideKey = "HistoryFolder"
+
+    /// The history folder of an override value: nil for a missing or blank value (then the app uses `defaultFolder`).
+    /// A leading `~` is the home folder. A relative path is relative to the current directory. A pure function.
+    public static func folder(override value: String?, home: String = NSHomeDirectory(),
+                              currentDirectory: String = FileManager.default.currentDirectoryPath) -> URL? {
+        guard var path = value?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else { return nil }
+        if path == "~" {
+            path = home
+        } else if path.hasPrefix("~/") {
+            path = (home as NSString).appendingPathComponent(String(path.dropFirst(2)))
+        }
+        if !path.hasPrefix("/") { path = (currentDirectory as NSString).appendingPathComponent(path) }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+    }
+
     public static var defaultFolder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("fm-object-clip/history", isDirectory: true)

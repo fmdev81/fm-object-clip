@@ -14,6 +14,9 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 0) {
             list
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if let folder = model.historyOverride { HistoryOverrideNote(folder: folder) }
+                }
                 .background(ListKeyResponder(model: model))
                 .frame(width: Self.listWidth)
                 .frame(maxHeight: .infinity)
@@ -484,5 +487,25 @@ struct ListKeyResponder: NSViewRepresentable {
     func updateNSView(_ view: ListKeyView, context: Context) {
         view.model = model
         model.listKeyView = view
+    }
+}
+
+/// A small note under the list when the app uses another history folder (`-HistoryFolder PATH`), so that a test or
+/// demo history is not mistaken for the real one. It shows in each screenshot of the window.
+struct HistoryOverrideNote: View {
+    let folder: URL
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "externaldrive.badge.questionmark")
+            Text("History: \(folder.lastPathComponent)").lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .help("This window uses the history folder \(folder.path) (launch argument -HistoryFolder).")
+        .accessibilityElement(children: .combine)
     }
 }

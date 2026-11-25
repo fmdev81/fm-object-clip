@@ -167,17 +167,29 @@ final class AppModel: ObservableObject {
     /// - Parameters:
     ///   - store: the history; nil opens the history of the app. Tests give a store in a temporary folder.
     ///   - watch: watch the clipboard and the history folder. Tests use false.
+    /// The history folder of the `-HistoryFolder PATH` launch argument (the `HistoryFolder` user default), or nil.
+    /// Tests and demos use it, so that the app does not open the real history. The window shows it in a footer note.
+    static let historyFolderOverride = HistoryStore.folder(
+        override: UserDefaults.standard.string(forKey: HistoryStore.folderOverrideKey))
+
+    /// The history folder that the app opens: the override, else the default folder.
+    static var appHistoryFolder: URL { historyFolderOverride ?? HistoryStore.defaultFolder }
+
+    /// The override folder when this model uses it (the app), for the footer note and the About panel. Nil in tests.
+    private(set) var historyOverride: URL?
+
     init(store: HistoryStore? = nil, watch: Bool = true) {
         expandedFolders = Set(UserDefaults.standard.stringArray(forKey: Self.expandedKey) ?? [])
         noFolderExpanded = !UserDefaults.standard.bool(forKey: Self.noFolderCollapsedKey)
         do {
-            let store = try store ?? HistoryStore()
+            if store == nil { historyOverride = Self.historyFolderOverride }
+            let store = try store ?? HistoryStore(folder: Self.appHistoryFolder)
             self.store = store
             entries = store.entries
             folders = store.folders
             settings = store.settings
         } catch {
-            errorMessage = "Cannot open the history in \(HistoryStore.defaultFolder.path): \(error.localizedDescription)"
+            errorMessage = "Cannot open the history in \((store?.folder ?? Self.appHistoryFolder).path): \(error.localizedDescription)"
             return
         }
         guard watch else { return }
@@ -189,7 +201,7 @@ final class AppModel: ObservableObject {
         watcher.start()
         self.watcher = watcher
         // Another process (fm-object-clip-cli, or a second app) can change the history. Then reload it.
-        folderWatcher = HistoryFolderWatcher(folder: HistoryStore.defaultFolder) { [weak self] in self?.reloadFromDisk() }
+        folderWatcher = HistoryFolderWatcher(folder: self.store?.folder ?? Self.appHistoryFolder) { [weak self] in self?.reloadFromDisk() }
     }
 
     private var folderWatcher: HistoryFolderWatcher?
@@ -613,9 +625,11 @@ final class AppModel: ObservableObject {
     }
 
     func showAbout() {
+        var credits = "A history of the FileMaker Pro objects on the clipboard."
+        if let historyOverride { credits += "\n\nHistory folder (-HistoryFolder): \(historyOverride.path)" }
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "fm-object-clip",
-            .credits: NSAttributedString(string: "A history of the FileMaker Pro objects on the clipboard.",
+            .credits: NSAttributedString(string: credits,
                                          attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]),
         ])
         NSApp.activate(ignoringOtherApps: true)

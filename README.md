@@ -91,6 +91,8 @@ The history is in `~/Library/Application Support/fm-object-clip/history/`. Your 
 
 The files are plain XML and JSON. Scripts and agents can read them without the app.
 
+For tests and demos, start the app with `-HistoryFolder PATH`, for example `open -n build/FMObjectClip.app --args -HistoryFolder ~/Desktop/demo-history`. The app then uses that folder in place of the real history: it reads and writes the entries, the folders and the settings there, and the safety backups of a restore go to the `backups` folder next to it. A note under the list shows the name of the folder, and **About fm-object-clip** shows the full path. A leading `~` is your home folder. With no argument, or an empty one, the app uses the real history. The CLI uses `--history DIR` for the same purpose.
+
 ## Backup
 
 A backup is one file with the full history: all the entries with their XML, all the folders in their order, and the settings (`settings.json`).
