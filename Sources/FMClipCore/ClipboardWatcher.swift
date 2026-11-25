@@ -4,23 +4,38 @@ import AppKit
 /// Calls `onCapture` with the FileMaker objects of each new clipboard contents. Contents with no FileMaker class
 /// call `onOther` (for example, plain text).
 ///
-/// The change count changes on `clearContents` and `declareTypes`, not on each `setData`. A tool that sets the data of
-/// the classes one by one can add data after the check. So for `settleTime` after a change, each check reads the
-/// FileMaker objects again. If they are not the same as at the last read (for example, `FOPN` came after the FileMaker
-/// class), the watcher calls `onCapture` again. The history then updates the same entry with the name and the folder.
+/// The change count changes on `clearContents` and `declareTypes`, not on each `setData`. So a tool can still add data
+/// after the check sees the change. For this reason the watcher does not capture at once. It reads the contents (the
+/// FileMaker objects, `FOPN` and `FOPF`) at each check, and it captures one time per change count:
+/// - when two checks in a row read the same contents, or
+/// - when `maxWait` has gone by since the change, with the contents of that check.
+/// After the capture, the watcher does not read that change count again. Data that comes later is ignored.
+/// A new change count before the capture drops the contents that did not settle, and the wait starts again.
 public final class ClipboardWatcher {
-    /// The time after a change while the watcher still reads the same contents again, in seconds.
-    public static let settleTime: TimeInterval = 2
+    /// The maximum time from a change to its capture, in seconds.
+    public static let maxWait: TimeInterval = 1.2
     public let pasteboard: NSPasteboard
     public let interval: TimeInterval
     private let onCapture: ([FMObject]) -> Void
     private let onOther: (() -> Void)?
+    /// The change count of the last change that the watcher saw (captured, waiting or ignored).
     private var lastChangeCount: Int
     private var timer: Timer?
-    /// The FileMaker objects of the current clipboard contents, at the last read.
-    private var lastObjects: [FMObject] = []
-    /// The end of the time to read the same contents again, or nil.
-    private var settleUntil: Date?
+
+    /// The contents of a change that waits for its capture.
+    private struct Pending {
+        var contents: Contents
+        let since: Date
+    }
+
+    /// What the watcher compares between two checks.
+    private struct Contents: Equatable {
+        let objects: [FMObject]
+        let name: String?
+        let folder: String?
+    }
+
+    private var pending: Pending?
     /// The clock (tests can change it).
     var now: () -> Date = Date.init
 
@@ -47,38 +62,38 @@ public final class ClipboardWatcher {
     }
 
     /// Ignores the clipboard contents of this change count, for example a copy from the app itself.
+    /// A change that still waits for its capture is dropped too: the clipboard has other contents now.
     public func ignore(changeCount: Int) {
         if changeCount > lastChangeCount {
             lastChangeCount = changeCount
-            settleUntil = nil
+            pending = nil
         }
     }
 
-    /// Does one check now. Returns the captured objects (empty if there is no change or no FileMaker class).
+    /// Does one check now. Returns the captured objects: empty if nothing was captured at this check (no change, the
+    /// contents do not have a FileMaker class, or the contents have not settled yet).
     @discardableResult
     public func poll() -> [FMObject] {
         let count = pasteboard.changeCount
-        guard count != lastChangeCount else { return recheck() }
-        lastChangeCount = count
-        settleUntil = now().addingTimeInterval(Self.settleTime)
-        let objects = FMPasteboard.read(pasteboard)
-        lastObjects = objects
-        if objects.isEmpty { onOther?() } else { onCapture(objects) }
-        return objects
-    }
-
-    /// The same change count as at the last check: in the settle time, reads the clipboard again. Calls `onCapture`
-    /// only if the FileMaker objects, their names or their folders are not the same as at the last read.
-    private func recheck() -> [FMObject] {
-        guard let until = settleUntil else { return [] }
-        guard now() <= until else {
-            settleUntil = nil
+        let contents = read()
+        if count != lastChangeCount {
+            lastChangeCount = count
+            pending = Pending(contents: contents, since: now())
             return []
         }
-        let objects = FMPasteboard.read(pasteboard)
-        guard objects != lastObjects else { return [] }
-        lastObjects = objects
-        if !objects.isEmpty { onCapture(objects) }
-        return objects
+        guard var p = pending else { return [] }
+        guard contents == p.contents || now().timeIntervalSince(p.since) >= Self.maxWait else {
+            p.contents = contents
+            pending = p
+            return []
+        }
+        pending = nil
+        if contents.objects.isEmpty { onOther?() } else { onCapture(contents.objects) }
+        return contents.objects
+    }
+
+    private func read() -> Contents {
+        Contents(objects: FMPasteboard.read(pasteboard),
+                 name: FMPasteboard.readName(pasteboard), folder: FMPasteboard.readFolder(pasteboard))
     }
 }

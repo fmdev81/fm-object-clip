@@ -59,9 +59,9 @@ final class CopyOrderTests: XCTestCase {
 
         // FileMaker Pro puts the same script on the clipboard again (compact, then pretty-printed).
         FMPasteboard.write(Self.compact(1), as: .XMSS, to: pasteboard)
-        XCTAssertEqual(watcher.poll().count, 1)
+        XCTAssertEqual(watcher.settle().count, 1)
         FMPasteboard.write(Self.pretty(1), as: .XMSS, to: pasteboard)
-        XCTAssertEqual(watcher.poll().count, 1)
+        XCTAssertEqual(watcher.settle().count, 1)
 
         try store.reload()
         XCTAssertEqual(store.entries, before)
@@ -74,9 +74,9 @@ final class CopyOrderTests: XCTestCase {
         let watcher = makeWatcher(store)  // the app
         let cli = try HistoryStore(folder: folder)  // another process on the same history
         XCTAssertNotNil(try cli.copy(three[0], to: pasteboard))
-        XCTAssertEqual(watcher.poll().count, 1)  // the app does not know the change count of the CLI
+        XCTAssertEqual(watcher.settle().count, 1)  // the app does not know the change count of the CLI
         FMPasteboard.write(Self.pretty(1), as: .XMSS, to: pasteboard)
-        XCTAssertEqual(watcher.poll().count, 1)
+        XCTAssertEqual(watcher.settle().count, 1)
 
         try store.reload()
         XCTAssertEqual(store.entries, before)
@@ -90,12 +90,12 @@ final class CopyOrderTests: XCTestCase {
 
         pasteboard.clearContents()
         pasteboard.setString("plain text", forType: .string)
-        XCTAssertEqual(watcher.poll(), [])
+        XCTAssertEqual(watcher.settle(), [])
         XCTAssertNil(store.lastRestore())
 
         // Now a copy of the same script in FileMaker Pro.
         FMPasteboard.write(Self.pretty(1), as: .XMSS, to: pasteboard)
-        watcher.poll()
+        watcher.settle()
         XCTAssertEqual(store.entries.first?.id, three[0].id)
         XCTAssertNotEqual(store.entries.first?.time, three[0].time)
         XCTAssertEqual(store.entries.count, 3)
@@ -106,10 +106,10 @@ final class CopyOrderTests: XCTestCase {
         let watcher = makeWatcher(store)
         try store.copy(three[0], to: pasteboard)
         FMPasteboard.write(Self.compact(9), as: .XMSS, to: pasteboard)  // a new object
-        watcher.poll()
+        watcher.settle()
         XCTAssertNil(store.lastRestore())
         FMPasteboard.write(Self.compact(1), as: .XMSS, to: pasteboard)
-        watcher.poll()
+        watcher.settle()
         XCTAssertEqual(store.entries.first?.id, three[0].id)
         XCTAssertEqual(store.entries.count, 4)
     }
@@ -178,9 +178,9 @@ final class CopyOrderTests: XCTestCase {
         // A copy in FileMaker Pro after other contents moves entry 2 to the top of the history.
         pasteboard.clearContents()
         pasteboard.setString("x", forType: .string)
-        watcher.poll()
+        watcher.settle()
         FMPasteboard.write(Self.compact(2), as: .XMSS, to: pasteboard)
-        watcher.poll()
+        watcher.settle()
         XCTAssertEqual(store.entries.first?.id, three[1].id)
         let rows = HistoryTree.rows(entries: store.entries, folders: store.folders, expanded: ["Project Test"],
                                     active: false) { _ in true }

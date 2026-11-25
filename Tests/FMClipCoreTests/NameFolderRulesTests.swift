@@ -75,59 +75,112 @@ final class NameFolderRulesTests: XCTestCase {
         XCTAssertEqual(store.entries[0].folder?.count, 200)
     }
 
-    // MARK: - The watcher, when a tool writes the classes one by one
+    // MARK: - The watcher: one capture for each clipboard change, after the contents settle
 
-    func makeWatcher(_ store: HistoryStore) -> ClipboardWatcher {
+    /// A watcher of the private pasteboard that captures into the store, as the app and `watch` do. It counts the
+    /// calls of onCapture (one call is one line of `watch`).
+    final class Calls { var count = 0 }
+
+    func makeWatcher(_ store: HistoryStore, calls: Calls? = nil) -> ClipboardWatcher {
         ClipboardWatcher(pasteboard: pasteboard, onOther: { store.forgetRestore() }) { objects in
+            calls?.count += 1
             for o in objects { _ = try? store.add(o.data, cls: o.cls, name: o.name, folder: o.folder) }
         }
     }
 
-    /// The change count does not change on setData. The watcher sees the type list grow and reads the clipboard again.
-    func testNameAddedAfterTheCheckStillReachesTheEntry() throws {
+    func testOneWriteIsCapturedOnceAfterOneSettleStep() throws {
         let store = try HistoryStore(folder: folder)
-        let watcher = makeWatcher(store)
-        pasteboard.clearContents()
-        pasteboard.setData(xml(1), forType: FMClass.XMSS.pasteboardType)
-        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1))])  // no name yet
-        let count = pasteboard.changeCount
-        pasteboard.setData(Data("Late name".utf8), forType: FMPasteboard.nameType)
-        pasteboard.setData(Data("Project A".utf8), forType: FMPasteboard.folderType)
-        XCTAssertEqual(pasteboard.changeCount, count)  // the reason for the check
-        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1), name: "Late name", folder: "Project A")])
-        XCTAssertEqual(watcher.poll(), [])  // no new type
-
-        XCTAssertEqual(store.entries.count, 1)
-        XCTAssertEqual(store.entries[0].name, "Late name")
-        XCTAssertEqual(store.entries[0].folder, "Project A")
+        let calls = Calls()
+        let watcher = makeWatcher(store, calls: calls)
+        put(xml(1), name: "Name", folder: "Folder")
+        XCTAssertEqual(watcher.poll(), [])  // the change: no capture yet
+        XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1), name: "Name", folder: "Folder")])
+        XCTAssertEqual(watcher.poll(), [])
+        XCTAssertEqual(watcher.poll(), [])
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(store.entries.map(\.folder), ["Folder"])
     }
 
-    func testObjectAddedAfterTheNameIsCaptured() throws {
+    /// Review finding P1: the object comes first, the folder later, in the same change count. At the limit, nothing
+    /// may be deleted, because the capture is in a folder.
+    func testLateFolderAtTheLimitDeletesNothing() throws {
+        let (store, ids) = try storeAtLimit()
+        let watcher = makeWatcher(store)
+        pasteboard.declareTypes([FMClass.XMSS.pasteboardType, FMPasteboard.folderType], owner: nil)
+        let count = pasteboard.changeCount
+        pasteboard.setData(xml(100), forType: FMClass.XMSS.pasteboardType)
+        XCTAssertEqual(watcher.poll(), [])  // the object without the folder
+        pasteboard.setData(Data("Project A".utf8), forType: FMPasteboard.folderType)
+        XCTAssertEqual(pasteboard.changeCount, count)  // the same clipboard generation
+        XCTAssertEqual(watcher.poll(), [])  // the contents changed: wait again
+        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(100), folder: "Project A")])
+
+        XCTAssertEqual(store.uncategorizedCount, 10)
+        XCTAssertEqual(store.entries.count, 11)
+        XCTAssertEqual(store.entries[0].folder, "Project A")
+        XCTAssertTrue(Set(store.entries.map(\.id)).isSuperset(of: ids))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent(ids[0] + ".xml").path))
+    }
+
+    /// Review finding P2: after the capture, the user deletes the entry. A new name in the same change count
+    /// does not make the entry again.
+    func testDeletedCaptureIsNotMadeAgain() throws {
         let store = try HistoryStore(folder: folder)
         let watcher = makeWatcher(store)
+        put(xml(1), name: "First")
+        XCTAssertEqual(watcher.settle().count, 1)
+        let e = try XCTUnwrap(store.entries.first)
+        try store.delete(id: e.id)
+        pasteboard.setData(Data("Second".utf8), forType: FMPasteboard.nameType)
+        for _ in 0..<4 { XCTAssertEqual(watcher.poll(), []) }
+        XCTAssertTrue(store.entries.isEmpty)
+    }
+
+    /// Review finding P2: after the capture, the user moves the entry. A new name in the same change count does not
+    /// put the folder of the clipboard back.
+    func testMovedCaptureStaysWhereTheUserPutIt() throws {
+        let store = try HistoryStore(folder: folder)
+        let watcher = makeWatcher(store)
+        put(xml(1), name: "First", folder: "From clipboard")
+        XCTAssertEqual(watcher.settle().count, 1)
+        let e = try XCTUnwrap(store.entries.first)
+        try store.move(id: e.id, to: "User choice")
+        pasteboard.setData(Data("Second".utf8), forType: FMPasteboard.nameType)
+        for _ in 0..<4 { XCTAssertEqual(watcher.poll(), []) }
+        XCTAssertEqual(store.entries.map(\.folder), ["User choice"])
+        XCTAssertEqual(store.entries.map(\.name), ["First"])
+    }
+
+    /// A value that comes after the capture is ignored.
+    func testNameAfterTheCaptureIsIgnored() throws {
+        let store = try HistoryStore(folder: folder)
+        let calls = Calls()
+        let watcher = makeWatcher(store, calls: calls)
         pasteboard.clearContents()
+        pasteboard.setData(xml(1), forType: FMClass.XMSS.pasteboardType)
+        XCTAssertEqual(watcher.settle(), [FMObject(cls: .XMSS, data: xml(1))])
+        pasteboard.setData(Data("Too late".utf8), forType: FMPasteboard.nameType)
+        for _ in 0..<4 { XCTAssertEqual(watcher.poll(), []) }
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertNil(store.entries[0].name)
+    }
+
+    func testObjectAfterTheNameInTheSameChangeIsCaptured() throws {
+        let store = try HistoryStore(folder: folder)
+        let watcher = makeWatcher(store)
+        pasteboard.declareTypes([FMPasteboard.nameType, FMClass.XMSS.pasteboardType], owner: nil)
         pasteboard.setData(Data("First name".utf8), forType: FMPasteboard.nameType)
         XCTAssertEqual(watcher.poll(), [])  // no FileMaker class yet
         pasteboard.setData(xml(1), forType: FMClass.XMSS.pasteboardType)
+        XCTAssertEqual(watcher.poll(), [])
         XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1), name: "First name")])
         XCTAssertEqual(store.entries.map(\.name), ["First name"])
     }
 
-    func testNoRecheckAfterTheSettleTime() throws {
-        let store = try HistoryStore(folder: folder)
-        let watcher = makeWatcher(store)
-        var clock = Date(timeIntervalSince1970: 1000)
-        watcher.now = { clock }
-        pasteboard.clearContents()
-        pasteboard.setData(xml(1), forType: FMClass.XMSS.pasteboardType)
-        XCTAssertEqual(watcher.poll().count, 1)
-        clock += ClipboardWatcher.settleTime + 0.1
-        pasteboard.setData(Data("Too late".utf8), forType: FMPasteboard.nameType)
-        XCTAssertEqual(watcher.poll(), [])
-        XCTAssertNil(store.entries[0].name)
-    }
-
-    /// With all the types declared at once, a check before the data is set sees no object. The next check sees it.
+    /// With all the types declared at once, a check before the data is set sees no object. The data comes before the
+    /// contents settle, so the capture has it.
     func testDeclaredTypesWithLateDataAreCaptured() throws {
         let store = try HistoryStore(folder: folder)
         let watcher = makeWatcher(store)
@@ -135,8 +188,63 @@ final class NameFolderRulesTests: XCTestCase {
         XCTAssertEqual(watcher.poll(), [])
         pasteboard.setData(xml(1), forType: FMClass.XMSS.pasteboardType)
         pasteboard.setData(Data("Declared".utf8), forType: FMPasteboard.nameType)
-        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1), name: "Declared")])
+        XCTAssertEqual(watcher.settle(), [FMObject(cls: .XMSS, data: xml(1), name: "Declared")])
         XCTAssertEqual(store.entries.map(\.name), ["Declared"])
+    }
+
+    /// Contents that change at each check are captured one time when `maxWait` has gone by.
+    func testContentsThatDoNotSettleAreCapturedAfterTheMaxWait() throws {
+        let store = try HistoryStore(folder: folder)
+        let calls = Calls()
+        let watcher = makeWatcher(store, calls: calls)
+        var clock = Date(timeIntervalSince1970: 1000)
+        watcher.now = { clock }
+        pasteboard.declareTypes([FMClass.XMSS.pasteboardType, FMPasteboard.nameType], owner: nil)
+        pasteboard.setData(xml(1), forType: FMClass.XMSS.pasteboardType)
+        XCTAssertEqual(watcher.poll(), [])
+        for i in 0..<2 {
+            clock += 0.4
+            pasteboard.setData(Data("Name \(i)".utf8), forType: FMPasteboard.nameType)
+            XCTAssertEqual(watcher.poll(), [])
+        }
+        clock = Date(timeIntervalSince1970: 1000) + ClipboardWatcher.maxWait  // 1.2 s since the change
+        pasteboard.setData(Data("Name 2".utf8), forType: FMPasteboard.nameType)
+        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1), name: "Name 2")])
+        XCTAssertEqual(watcher.poll(), [])
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(store.entries.map(\.name), ["Name 2"])
+    }
+
+    /// A second copy before the first settles: only the second (settled) copy is captured.
+    func testSecondCopyDuringTheWaitReplacesTheFirst() throws {
+        let store = try HistoryStore(folder: folder)
+        let calls = Calls()
+        let watcher = makeWatcher(store, calls: calls)
+        put(xml(1), name: "First")
+        XCTAssertEqual(watcher.poll(), [])
+        put(xml(2), name: "Second")
+        XCTAssertEqual(watcher.poll(), [])  // a new change: the wait starts again
+        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(2), name: "Second")])
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(store.entries.map(\.name), ["Second"])
+    }
+
+    /// The copy of the app itself (Copy Entry) is not captured, also when it comes during the wait of another change.
+    func testIgnoredCopyIsNotCaptured() throws {
+        let store = try HistoryStore(folder: folder)
+        let calls = Calls()
+        let watcher = makeWatcher(store, calls: calls)
+        put(xml(1), name: "Name")
+        XCTAssertEqual(watcher.poll(), [])  // waits
+        let count = try XCTUnwrap(FMPasteboard.write(xml(2), as: .XMSS, to: pasteboard))
+        watcher.ignore(changeCount: count)
+        for _ in 0..<4 { XCTAssertEqual(watcher.poll(), []) }
+        XCTAssertEqual(calls.count, 0)
+        XCTAssertTrue(store.entries.isEmpty)
+
+        put(xml(3))  // the next copy is captured as usual
+        XCTAssertEqual(watcher.settle().count, 1)
+        XCTAssertEqual(calls.count, 1)
     }
 
     /// NSPasteboardItem does not accept the type names "CorePasteboardFlavorType 0x...": setData returns false.
@@ -145,31 +253,6 @@ final class NameFolderRulesTests: XCTestCase {
         let item = NSPasteboardItem()
         XCTAssertFalse(item.setData(xml(1), forType: FMClass.XMSS.pasteboardType))
         XCTAssertFalse(item.setData(Data("Name".utf8), forType: FMPasteboard.nameType))
-    }
-
-    func testOneWriteIsReadOnce() throws {
-        let store = try HistoryStore(folder: folder)
-        var calls = 0
-        let watcher = ClipboardWatcher(pasteboard: pasteboard) { objects in
-            calls += 1
-            for o in objects { _ = try? store.add(o.data, cls: o.cls, name: o.name, folder: o.folder) }
-        }
-        put(xml(1), name: "Name", folder: "Folder")
-        XCTAssertEqual(watcher.poll(), [FMObject(cls: .XMSS, data: xml(1), name: "Name", folder: "Folder")])
-        XCTAssertEqual(watcher.poll(), [])
-        XCTAssertEqual(calls, 1)
-    }
-
-    /// The app ignores its own copy, also in the settle time of the contents before.
-    func testIgnoredCopyIsNotCheckedAgain() throws {
-        let store = try HistoryStore(folder: folder)
-        let watcher = makeWatcher(store)
-        put(xml(1), name: "Name")
-        XCTAssertEqual(watcher.poll().count, 1)
-        let count = try XCTUnwrap(FMPasteboard.write(xml(2), as: .XMSS, to: pasteboard))
-        watcher.ignore(changeCount: count)
-        XCTAssertEqual(watcher.poll(), [])
-        XCTAssertEqual(store.entries.count, 1)
     }
 
     // MARK: - The uncategorized limit

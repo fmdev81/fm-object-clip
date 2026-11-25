@@ -53,7 +53,7 @@ To test or to make screenshots without your real history, start the app with `-H
 
 ## Clipboard capture
 
-The app checks the clipboard (`NSPasteboard.changeCount`) every 0.4 seconds, because macOS does not send an event when the clipboard changes. Any program that puts one of the classes below on the clipboard is captured the same way as FileMaker Pro.
+The app checks the clipboard (`NSPasteboard.changeCount`) every 0.4 seconds, because macOS does not send an event when the clipboard changes. After a change, the app waits until two checks in a row read the same contents, or until 1.2 seconds have gone by. Then it captures the contents one time. So a copy is in the history 0.4 to 0.8 seconds after Cmd+C, when its contents do not change. If the clipboard changes again before the capture, the app drops the first contents and waits for the new ones. Any program that puts one of the classes below on the clipboard is captured the same way as FileMaker Pro.
 
 | Class | Objects | Label in the app |
 |---|---|---|
@@ -77,7 +77,7 @@ Each class is optional. The app capture, `fm-object-clip-cli watch` and `fm-obje
 
 ### Write all the classes in one clipboard write
 
-The change count of the clipboard changes when a program clears it or declares its types. It does not change when the program sets the data of one more type. The app checks the change count every 0.4 seconds. If the app checks between two `setData` calls, it can see the FileMaker class without the name.
+The change count of the clipboard changes when a program clears it or declares its types. It does not change when the program sets the data of one more type. So the app cannot see when a write is complete. It waits until the clipboard is stable (up to about 1 second, see [Clipboard capture](#clipboard-capture)), and then it captures one time. A value that arrives after the capture is ignored.
 
 Do this:
 
@@ -97,7 +97,7 @@ pb.setData(Data("Invoicing".utf8), forType: folder)
 
 Do not use `clearContents` and then one `setData` call for each type: then the types arrive one by one. Do not use `NSPasteboardItem` with these type names. It refuses them (`setData` returns false and logs "is not a valid UTI string").
 
-As a safety net, the app reads the clipboard again at each check for 2 seconds after a change. If the objects, the name or the folder change in that time, the app updates the same entry. But until the folder arrives, the entry is in the **Uncategorized** group and counts for the Uncategorized limit. At the limit, that can delete the oldest uncategorized entry. So write all the classes at once.
+If a tool sets the data slowly, with a pause between the calls, the capture can come before the name or the folder. Then the entry has no name, or it goes to the **Uncategorized** group. The app does not change the entry later. So write all the classes together.
 
 ### How the app reads the values
 
