@@ -4,34 +4,19 @@
 <Object type="Portal" key="34" LabelKey="0" flags="0" rotation="0">
 <Bounds top="157.0000000" left="40.0000000" bottom="1145.0000000" right="440.0000000"/>
 <PortalObj portalFlags="153" numOfRows="29" initialRow="1">
-<TableAliasKey>contact_CONTACT__all</TableAliasKey>
+<TableAliasKey>Contacts</TableAliasKey>
 <SortList>
 <Sort type="Ascending">
-<Name>contact_CONTACT__all::NameCombined_c</Name>
+<Name>Contacts::Name</Name>
 </Sort>
 <Sort type="Ascending">
-<Name>contact_CONTACT__all::AddressBilling_City</Name>
+<Name>Contacts::City</Name>
 </Sort>
 </SortList>
-<FilterCalc><Calculation><![CDATA[IsEmpty ( CONTACT::FILTER_g )
-or 
-PatternCount ( contact_CONTACT__all::NameCombined_c ; CONTACT::FILTER_g )
-or 
-PatternCount ( contact_CONTACT__all::AddressBilling_City ; CONTACT::FILTER_g )]]></Calculation></FilterCalc>
 <Object type="Field" key="146" LabelKey="0" flags="1" rotation="0">
-<ConditionalFormatting>
-<Item id="0" flags="5">
-<Condition op="0">
-<Calculation><![CDATA[CONTACT::__ID = contact_CONTACT__all::__ID]]></Calculation><RangeBegin></RangeBegin>
-<RangeEnd></RangeEnd>
-</Condition>
-<Format>
-</Format>
-</Item>
-</ConditionalFormatting>
 <Bounds top="-1.0000000" left="235.0000000" bottom="34.0000000" right="382.0000000"/>
 <FieldObj numOfReps="1" flags="52" inputMode="0" keyboardType="1" displayType="0" quickFind="1" pictFormat="5">
-<Name>contact_CONTACT__all::AddressBilling_City</Name>
+<Name>Contacts::City</Name>
 <ExtendedAttributes fontHeight="14" graphicFormat="5">
 <NumFormat flags="2304" charStyle="0" negativeStyle="0" currencySymbol="$" thousandsSep="44" decimalPoint="46" negativeColor="#DD000000" decimalDigits="2" trueString="Yes" falseString="No"/>
 <DateFormat format="0" charStyle="0" monthStyle="0" dayStyle="0" separator="47">
@@ -54,24 +39,14 @@ PatternCount ( contact_CONTACT__all::AddressBilling_City ; CONTACT::FILTER_g )]]
 </CharacterStyle>
 </ExtendedAttributes>
 <DDRInfo>
-<Field name="AddressBilling_City" id="12" repetition="1" maxRepetition="1" table="contact_CONTACT__all"/>
+<Field name="City" id="12" repetition="1" maxRepetition="1" table="Contacts"/>
 </DDRInfo>
 </FieldObj>
 </Object>
 <Object type="Field" key="227" LabelKey="0" flags="1" rotation="0">
-<ConditionalFormatting>
-<Item id="0" flags="5">
-<Condition op="0">
-<Calculation><![CDATA[CONTACT::__ID = contact_CONTACT__all::__ID]]></Calculation><RangeBegin></RangeBegin>
-<RangeEnd></RangeEnd>
-</Condition>
-<Format>
-</Format>
-</Item>
-</ConditionalFormatting>
 <Bounds top="-1.0000000" left="-1.0000000" bottom="34.0000000" right="235.0000000"/>
 <FieldObj numOfReps="1" flags="52" inputMode="0" keyboardType="1" displayType="0" quickFind="1" pictFormat="5">
-<Name>contact_CONTACT__all::NameCombined_c</Name>
+<Name>Contacts::Name</Name>
 <ExtendedAttributes fontHeight="14" graphicFormat="5">
 <NumFormat flags="2304" charStyle="0" negativeStyle="0" currencySymbol="$" thousandsSep="44" decimalPoint="46" negativeColor="#DD000000" decimalDigits="2" trueString="Yes" falseString="No"/>
 <DateFormat format="0" charStyle="0" monthStyle="0" dayStyle="0" separator="47">
@@ -94,7 +69,7 @@ PatternCount ( contact_CONTACT__all::AddressBilling_City ; CONTACT::FILTER_g )]]
 </CharacterStyle>
 </ExtendedAttributes>
 <DDRInfo>
-<Field name="NameCombined_c" id="9" repetition="1" maxRepetition="1" table="contact_CONTACT__all"/>
+<Field name="Name" id="9" repetition="1" maxRepetition="1" table="Contacts"/>
 </DDRInfo>
 </FieldObj>
 </Object>
@@ -142,7 +117,7 @@ PatternCount ( contact_CONTACT__all::AddressBilling_City ; CONTACT::FILTER_g )]]
 </ParagraphStyleVector>
 </TextObj>
 <ButtonObj buttonFlags="0" iconSize="11" displayType="0">
-<Step enable="True" id="74" name="Go to Related Record"><Option state="False"></Option><MatchAllRecords state="False"></MatchAllRecords><ShowInNewWindow state="False"></ShowInNewWindow><DisableStepCollapsed state="False"></DisableStepCollapsed><Restore state="False"></Restore><LayoutDestination value="CurrentLayout"></LayoutDestination><NewWndStyles Style="Document" Close="Yes" Minimize="Yes" Maximize="Yes" Resize="Yes" Styles="3606018"></NewWndStyles><Table id="1065269" name="contact_CONTACT__all"></Table></Step>
+<Step enable="True" id="74" name="Go to Related Record"><Option state="False"></Option><MatchAllRecords state="False"></MatchAllRecords><ShowInNewWindow state="False"></ShowInNewWindow><DisableStepCollapsed state="False"></DisableStepCollapsed><Restore state="False"></Restore><LayoutDestination value="CurrentLayout"></LayoutDestination><NewWndStyles Style="Document" Close="Yes" Minimize="Yes" Maximize="Yes" Resize="Yes" Styles="3606018"></NewWndStyles><Table id="1" name="Contacts"></Table></Step>
 </ButtonObj>
 </Object>
 </PortalObj>

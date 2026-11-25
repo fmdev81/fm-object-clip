@@ -50,8 +50,10 @@ final class PortalCheckTests: XCTestCase {
         XCTAssertEqual(PortalCheck.problems(cls: .XML2, data: clip("0", "-1.5", "20", "200")).count, 1)
     }
 
-    /// Real copies from FileMaker Pro 26.1.1 (Layout mode, Cmd+C on a portal), with the Styles elements taken out.
-    /// The portals are not at the top left of the layout, and the child bounds start at the portal top left.
+    /// Real copies from FileMaker Pro 26.1.1 (Layout mode, Cmd+C on a portal). The table, field and value list
+    /// names are neutral, and the styles, calculations and icons are taken out. The objects, their nesting and
+    /// their bounds are as FileMaker wrote them. The portals are not at the top left of the layout, and the child
+    /// bounds start at the portal top left.
     static func fixture(_ name: String) throws -> Data {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/\(name)")
         return try Data(contentsOf: url)
@@ -72,7 +74,7 @@ final class PortalCheckTests: XCTestCase {
                                               with: "<Bounds top=\"30\" left=\"0\" bottom=\"55\" right=\"93\"/>")
         XCTAssertNotEqual(moved, real)
         let problems = PortalCheck.problems(cls: .XML2, data: Data(moved.utf8))
-        XCTAssertEqual(problems, ["portal key 466: Field contact_COMMUNICATION__IDcontact::Date_d at 30,-1,55,92 "
+        XCTAssertEqual(problems, ["portal key 466: Field Portal_Rows::Date at 30,-1,55,92 "
                                   + "is outside the first row of the portal (0,0,25.1333,1320; 15 rows)"])
         let probe = "<fmxmlsnippet type=\"LayoutObjectList\"><Layout><Object type=\"Portal\" key=\"1\">"
             + "<Bounds top=\"0\" left=\"0\" bottom=\"100\" right=\"100\"/><PortalObj numOfRows=\"4\">"
