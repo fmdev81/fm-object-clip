@@ -210,6 +210,7 @@ Run `fm-object-clip-cli --help` for all the commands. The full reference, with t
 - The app is for macOS only. FileMaker Pro for Windows uses different clipboard formats.
 - The app captures only the 4 types above.
 - You cannot change the XML in the app.
+- For layout objects with a portal, the app checks that each portal child is in the first portal row. If it is not, **Copy Entry** asks before it copies. See [the portal check](docs/CLI.md#portal-check).
 - The app does not paste into FileMaker Pro. You press Cmd+V.
 
 ## Development

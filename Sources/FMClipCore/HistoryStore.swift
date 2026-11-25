@@ -514,7 +514,13 @@ public final class HistoryStore {
     /// The store first writes the record `.last-restore.json` in the history folder (see `RestoreRecord`), so that the
     /// watcher of the app, or of another process, does not move the entry to the top when it sees the copy.
     public func copy(_ entry: HistoryEntry, to pasteboard: NSPasteboard = .general) throws -> Int? {
-        let data = try data(for: entry)
+        copy(entry, data: try data(for: entry), to: pasteboard)
+    }
+
+    /// Puts `data` on the pasteboard as the entry, with the class of the entry, and writes the restore record.
+    /// Use it to copy bytes that were read earlier (for example, the bytes that the user approved), with no new read.
+    @discardableResult
+    public func copy(_ entry: HistoryEntry, data: Data, to pasteboard: NSPasteboard = .general) -> Int? {
         let record = RestoreRecord(id: entry.id, cls: entry.cls, sha256: entry.sha256,
                                    canonical: entry.canonical ?? Canonical.key(for: data))
         try? JSONEncoder().encode(record).write(to: restoreURL, options: .atomic)
@@ -560,7 +566,8 @@ public final class HistoryStore {
         return names.filter { seen.insert($0).inserted }
     }
 
-    static func sha256(_ data: Data) -> String {
+    /// The SHA-256 of the bytes, in lowercase hex.
+    public static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
