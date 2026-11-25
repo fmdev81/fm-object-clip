@@ -323,22 +323,37 @@ final class AppModel: ObservableObject {
     /// Puts the entry on the clipboard with its class. The watcher ignores this change, so it makes no new entry.
     /// The entry keeps its time and its place, also when FileMaker Pro writes the clipboard again (see RestoreRecord).
     /// For a layout entry with a portal child outside the first portal row (PortalCheck), the app asks first.
-    /// `checked: false` copies without the check (after "Copy Anyway").
-    func copy(_ entry: HistoryEntry, to pasteboard: NSPasteboard = .general, checked: Bool = true) {
+    /// The app reads the bytes once. After "Copy Anyway", it copies those bytes with the class of that entry, and
+    /// does not read the file again. If the history changed while the question was open (a Replace, a delete, or
+    /// other XML for the id), it does not copy, and it says so.
+    func copy(_ entry: HistoryEntry, to pasteboard: NSPasteboard = .general) {
         guard let store else { return }
-        do {
-            if checked, let message = PortalCheck.message(cls: entry.cls, data: try store.data(for: entry)) {
-                askPortalCopy(message) { [weak self] ok in
-                    if ok { self?.copy(entry, to: pasteboard, checked: false) }
-                }
+        let data: Data
+        do { data = try store.data(for: entry) } catch {
+            errorMessage = "Cannot read the entry \(entry.id): \(error.localizedDescription)"
+            return
+        }
+        guard let message = PortalCheck.message(cls: entry.cls, data: data) else { return write(entry, data, to: pasteboard) }
+        let generation = store.generation
+        askPortalCopy(message) { [weak self] ok in
+            guard ok, let self, let store = self.store else { return }
+            self.reloadFromDisk()
+            guard store.generation == generation, let now = store.entry(id: entry.id),
+                  now.cls == entry.cls, now.sha256 == HistoryStore.sha256(data)
+            else {
+                self.errorMessage = "The history changed while the question was open, so the app did not copy the entry."
                 return
             }
-            guard let count = try store.copy(entry, to: pasteboard) else { errorMessage = "The clipboard refused the data."; return }
-            watcher?.ignore(changeCount: count)
-            showCopied(entry.id)
-        } catch {
-            errorMessage = "Cannot read the entry \(entry.id): \(error.localizedDescription)"
+            self.write(entry, data, to: pasteboard)
         }
+    }
+
+    /// Puts the bytes on the clipboard as the entry. The watcher ignores this change.
+    private func write(_ entry: HistoryEntry, _ data: Data, to pasteboard: NSPasteboard) {
+        guard let store else { return }
+        guard let count = store.copy(entry, data: data, to: pasteboard) else { errorMessage = "The clipboard refused the data."; return }
+        watcher?.ignore(changeCount: count)
+        showCopied(entry.id)
     }
 
     /// Asks before a copy of an entry that the portal check refuses, and calls the answer (true: copy).

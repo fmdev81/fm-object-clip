@@ -144,4 +144,66 @@ final class PortalCheckTests: XCTestCase {
         XCTAssertTrue(model.errorMessage?.hasPrefix("The app kept the capture, but Copy Entry will ask") == true,
                       model.errorMessage ?? "nil")
     }
+
+    /// A temp history, a model on it, a private pasteboard, and a bad layout entry whose question stays open.
+    /// `answer` answers the question later, as a sheet does.
+    func pendingCopy() throws -> (HistoryStore, AppModel, NSPasteboard, HistoryEntry, (Bool) -> Void, URL) {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("fm-object-clip-tests-\(UUID().uuidString)")
+        let store = try HistoryStore(folder: folder)
+        let bad = try store.add(clip("116", "24", "136", "234"), cls: .XML2, name: "bad")
+        let model = AppModel(store: store, watch: false)
+        var answer: ((Bool) -> Void)?
+        model.confirmPortalCopy = { _, done in answer = done }
+        let board = NSPasteboard(name: NSPasteboard.Name("fm-object-clip-tests-\(UUID().uuidString)"))
+        board.clearContents()
+        model.copy(bad, to: board)
+        return (store, model, board, bad, try XCTUnwrap(answer), folder)
+    }
+
+    /// The review's case: while the question is open, a Replace puts other XML with another class under the same
+    /// id. Copy Anyway then copies nothing, and the app says why.
+    func testCopyAnywayAfterAReplaceCopiesNothing() throws {
+        let (store, model, board, bad, answer, folder) = try pendingCopy()
+        defer { board.releaseGlobally(); try? FileManager.default.removeItem(at: folder) }
+        let before = board.changeCount
+
+        let newData = Data("<fmxmlsnippet type=\"FMObjectList\"><Step enable=\"True\" id=\"89\" name=\"# (comment)\"/></fmxmlsnippet>".utf8)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(bad)) as? [String: Any])
+        json["class"] = "XMSS"
+        json["sha256"] = HistoryStore.sha256(newData)
+        json["canonical"] = Canonical.key(for: newData)
+        let newEntry = try JSONDecoder().decode(HistoryEntry.self, from: JSONSerialization.data(withJSONObject: json))
+        let backup = Backup(created: bad.time, folders: [], settings: nil, items: [.init(entry: newEntry, data: newData)])
+        try store.replace(with: try Backup.decode(backup.encoded()))
+        model.reloadFromDisk()
+        XCTAssertEqual(store.entry(id: bad.id)?.cls, .XMSS)
+
+        answer(true)
+        XCTAssertEqual(board.changeCount, before)
+        XCTAssertNil(board.data(forType: FMClass.XML2.pasteboardType))
+        XCTAssertNil(board.data(forType: FMClass.XMSS.pasteboardType))
+        XCTAssertEqual(model.errorMessage, "The history changed while the question was open, so the app did not copy the entry.")
+    }
+
+    /// The entry is deleted (here by another store, as the CLI does) while the question is open: no copy.
+    func testCopyAnywayAfterADeleteCopiesNothing() throws {
+        let (_, model, board, bad, answer, folder) = try pendingCopy()
+        defer { board.releaseGlobally(); try? FileManager.default.removeItem(at: folder) }
+        let before = board.changeCount
+        try HistoryStore(folder: folder).delete(ids: [bad.id])
+
+        answer(true)
+        XCTAssertEqual(board.changeCount, before)
+        XCTAssertTrue(model.errorMessage?.hasPrefix("The history changed") == true, model.errorMessage ?? "nil")
+    }
+
+    /// With no change, a late Copy Anyway copies the bytes that were read before the question.
+    func testLateCopyAnywayCopiesTheApprovedBytes() throws {
+        let (store, model, board, bad, answer, folder) = try pendingCopy()
+        defer { board.releaseGlobally(); try? FileManager.default.removeItem(at: folder) }
+        answer(true)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(board.data(forType: FMClass.XML2.pasteboardType), clip("116", "24", "136", "234"))
+        XCTAssertEqual(store.lastRestore()?.id, bad.id)
+    }
 }
